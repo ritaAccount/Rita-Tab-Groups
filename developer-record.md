@@ -422,3 +422,44 @@ media/shortcuts.js        # 按键捕获逻辑
 **涉及文件**：`types.ts`、`displaySettingsUtils.ts`、`treeProvider.ts`、`settingsWebview.ts`、`media/settings.js`、`package.json`、`example/settings.json`、文档
 
 ---
+
+### 激活时写入 AI Skill（2026-09）
+
+| 项 | 决策 |
+|----|------|
+| 目的 | 用户可用自然语言让 Agent 完成几乎全部 Tab Groups 操作（改 JSON / settings） |
+| 产物 | `.cursor/skills/tab-groups/SKILL.md`（标准 Cursor 项目 Skill） |
+| 模板 | `media/tab-groups.skill.md`；文首「给用户」说明如何启用，后文「给 AI」操作手册 |
+| 版本 | 注释 `tab-groups-ai-guide-version`；仅当工作区文件缺失或版本落后时覆盖；变更见 `version/skill/<n>/changes.json` |
+| 时机 | `initializeShortcutSettings`（激活与切换工作区时） |
+| 不再写 | `.cursor/rules/tab-groups.mdc`、`.vscode/tab-groups-ai.md`（改以 Skill 为单一入口） |
+
+**涉及文件**：`media/tab-groups.skill.md`、`workspace/aiGuideUtils.ts`、`settingsWebview.ts`、`src/explain.md`、`README.md`、`developer-readme.md`、`example/explain.md`、`example/tab-groups.SKILL.md`
+
+---
+
+### version/ 备份命名与 Skill 快照（2026-09）
+
+| 项 | 决策 |
+|----|------|
+| 目录 | 统一放在 `version/` |
+| 改名 | `version-backup.json` → `version/tab-groups-backup.json`（内容只搬迁，不改已有 schema key） |
+| Skill bk | 新增 `version/tab-groups-skill-backup.json`；key = `AI_GUIDE_VERSION`（`1` 为旧手册+rule，`2` 为 Cursor Skill） |
+| 约定 | `version/explain.md`；`AGENTS.md` / `CLAUDE.md` / docs-maintenance 规则同步 |
+
+**涉及文件**：`version/*`、`AGENTS.md`、`CLAUDE.md`、`.cursor/rules/docs-maintenance.mdc`、`src/explain.md`、`developer-readme.md`
+
+---
+
+### version/ 改为每版本独立文件夹（2026-09）
+
+| 项 | 决策 |
+|----|------|
+| 说明 | 版本约定集中在 `version/explain.md` |
+| 结构 | `version/tab-groups/<semver>/`、`version/skill/<n>/`；去掉整包 `*-backup.json` |
+| 每版必有 | `changes.json`（相对上一版变动）**与**完整 `example`（tab-groups 用 `example.json`；skill 用索引 + 正文文件） |
+| 规则 | 只追加新文件夹；不改已有版本目录内容 |
+
+**涉及文件**：`version/**`、`AGENTS.md`、`CLAUDE.md`、`.cursor/rules/docs-maintenance.mdc`、`src/explain.md`、`developer-readme.md`
+
+---

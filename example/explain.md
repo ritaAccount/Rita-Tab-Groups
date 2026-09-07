@@ -8,6 +8,7 @@
 | `tab-groups.json` | 工作区 `.vscode/tab-groups.json` | 首次激活且文件不存在时创建；之后随分组、标记、扫描等操作立刻写回 |
 | `settings.json` | 工作区 `.vscode/settings.json` | 首次激活补全默认快捷键与显示配置；之后在设置页修改 |
 | `keybindings.json` | 本机用户 `User/keybindings.json` | 保存快捷键时同步；**不是**工作区文件，一般不要提交到项目 |
+| `tab-groups.SKILL.md` | 工作区 `.cursor/skills/tab-groups/SKILL.md` | 首次激活由扩展从 `media/tab-groups.skill.md` 写入；指南版本升高时覆盖。文首说明如何让 AI 使用 |
 
 macOS 上用户快捷键文件大致在：
 

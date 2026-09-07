@@ -1,0 +1,9 @@
+{
+  "version": "1.2.0",
+  "kind": "tab-groups",
+  "from": "1.1.0",
+  "summary": "文件条目支持单点定位 line/column",
+  "changes": [
+    "GroupFileEntry 可选 line、column（打开跳转到该点）"
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "version": 2,
+  "kind": "skill",
+  "from": 1,
+  "summary": "改为标准 Cursor 项目 Skill，文首增加用户启用说明",
+  "changes": [
+    "改为写入 .cursor/skills/tab-groups/SKILL.md",
+    "增加 YAML frontmatter（name/description）",
+    "文首「给用户」启用说明 + 「给 AI」操作手册",
+    "不再写入 tab-groups-ai.md / cursor rule",
+    "覆盖当前 display（含 showSourceBranch、groupTypeDisplayMode）与 schema 1.5.0 说明"
+  ],
+  "targets": [
+    ".cursor/skills/tab-groups/SKILL.md"
+  ]
+}

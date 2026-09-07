@@ -331,10 +331,11 @@ src/
 │   ├── tabGroupsManager.ts
 │   ├── fileEntryUtils.ts        # CONFIG_VERSION、别名与 markers / branch 迁移
 │   └── groupHierarchyUtils.ts
-├── workspace/                   # 工作区路径、文件存在性、Git 分支
+├── workspace/                   # 工作区路径、文件存在性、Git 分支、AI Skill
 │   ├── workspaceUtils.ts
 │   ├── fileExistenceCache.ts
-│   └── gitBranchUtils.ts
+│   ├── gitBranchUtils.ts
+│   └── aiGuideUtils.ts          # 激活时写入 .cursor/skills/tab-groups/SKILL.md
 ├── tree/                        # 侧边栏、命令、编辑器打开 / 标记跳转
 │   ├── treeProvider.ts
 │   ├── commands.ts
@@ -347,7 +348,13 @@ src/
 
 media/
 ├── settings.css / settings.js
-└── shortcuts.css / shortcuts.js # 快捷键 pane：按键捕获
+├── shortcuts.css / shortcuts.js # 快捷键 pane：按键捕获
+└── tab-groups.skill.md          # 激活时写入工作区 `.cursor/skills/tab-groups/SKILL.md`
+
+version/                         # 版本信息（不参与运行时）；约定见 explain.md
+├── explain.md
+├── tab-groups/<semver>/         # changes.json + example.json
+└── skill/<n>/                   # changes.json + example（正文）
 ```
 
 ---

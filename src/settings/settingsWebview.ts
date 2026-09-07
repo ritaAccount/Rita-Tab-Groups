@@ -5,6 +5,7 @@ import {
   getDisplaySettings,
   saveDisplaySettings,
 } from './displaySettingsUtils';
+import { AI_SKILL_RELATIVE_PATH, ensureWorkspaceAiGuide } from '../workspace/aiGuideUtils';
 import { TabGroupsManager } from '../data/tabGroupsManager';
 import {
   CONFIG_RELATIVE_PATH,
@@ -516,4 +517,11 @@ function getWebviewHtml(webview: vscode.Webview, extensionUri: vscode.Uri): stri
 export async function initializeShortcutSettings(): Promise<void> {
   await ensureWorkspaceShortcutSettings();
   await ensureWorkspaceDisplaySettings();
+  const wroteAiSkill = await ensureWorkspaceAiGuide();
+  if (wroteAiSkill) {
+    vscode.window.setStatusBarMessage(
+      `Tab Groups: 已写入 AI Skill（${AI_SKILL_RELATIVE_PATH}），可直接让 AI 代操作分组`,
+      6000,
+    );
+  }
 }

@@ -1,0 +1,39 @@
+{
+  "groups": [
+    {
+      "id": "group-1",
+      "name": "我的手动分组",
+      "files": [
+        "src/index.ts",
+        "src/utils.ts"
+      ]
+    },
+    {
+      "id": "group-2",
+      "name": "后端逻辑",
+      "files": [
+        "server.js"
+      ],
+      "configId": "backend-regex"
+    },
+    {
+      "id": "group-3",
+      "name": "前端组件",
+      "files": [
+        "components/Button.tsx"
+      ],
+      "config": {
+        "type": "regex",
+        "regex": ".*/components/.*\\.tsx$"
+      }
+    }
+  ],
+  "configs": [
+    {
+      "id": "backend-regex",
+      "type": "regex",
+      "regex": ".*/server/.*\\.js$",
+      "description": "后端 JS 文件"
+    }
+  ]
+}

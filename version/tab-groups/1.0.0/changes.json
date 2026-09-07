@@ -1,0 +1,11 @@
+{
+  "version": "1.0.0",
+  "kind": "tab-groups",
+  "from": null,
+  "summary": "初版：平铺分组 + 手动/正则配置，files 为路径字符串",
+  "changes": [
+    "根对象含 groups、configs",
+    "Group：id、name、files（string[]）、可选 config / configId",
+    "GlobalConfig：id、type、regex、description"
+  ]
+}

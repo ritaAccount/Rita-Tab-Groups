@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "kind": "skill",
+  "from": null,
+  "summary": "初版 AI 操作手册 + Cursor alwaysApply 规则",
+  "changes": [
+    "写入 .vscode/tab-groups-ai.md（完整操作手册）",
+    "写入 .cursor/rules/tab-groups.mdc（alwaysApply，指向手册）",
+    "版本注释 tab-groups-ai-guide-version: 1"
+  ],
+  "targets": [
+    ".vscode/tab-groups-ai.md",
+    ".cursor/rules/tab-groups.mdc"
+  ]
+}

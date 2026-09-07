@@ -1,0 +1,11 @@
+{
+  "format": "markdown-guide+cursor-rule",
+  "targets": [
+    ".vscode/tab-groups-ai.md",
+    ".cursor/rules/tab-groups.mdc"
+  ],
+  "files": {
+    "tab-groups-ai.md": "example-tab-groups-ai.md",
+    "tab-groups.cursor-rule.md": "example-tab-groups.cursor-rule.md"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "version": "1.5.0",
+  "kind": "tab-groups",
+  "from": "1.4.0",
+  "summary": "记录添加时的 Git 分支",
+  "changes": [
+    "GroupFileEntry 可选 branch",
+    "FileMarkerItem（markers[].content[]）可选 branch"
+  ]
+}

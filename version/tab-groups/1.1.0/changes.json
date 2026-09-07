@@ -1,0 +1,11 @@
+{
+  "version": "1.1.0",
+  "kind": "tab-groups",
+  "from": "1.0.0",
+  "summary": "嵌套分组 + 文件改为对象（path/alias）；根对象增加 version",
+  "changes": [
+    "根对象新增 version",
+    "Group 新增 level、children",
+    "files 由 string 改为 { path, alias }"
+  ]
+}
