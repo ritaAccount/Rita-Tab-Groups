@@ -78,7 +78,9 @@
           "description": "Tab Groups 显示相关配置",
           "default": {
             "markerJumpHintMode": "always",
-            "markerJumpHintSeconds": 1
+            "markerJumpHintSeconds": 1,
+            "showSourceBranch": true,
+            "groupTypeDisplayMode": "label"
           },
           "properties": {
             "markerJumpHintMode": {
@@ -98,6 +100,22 @@
               "minimum": 0.5,
               "maximum": 60,
               "description": "「显示秒数」模式下，左下角提示停留的秒数"
+            },
+            "showSourceBranch": {
+              "type": "boolean",
+              "default": true,
+              "description": "是否在侧边栏显示节点的来源 Git 分支"
+            },
+            "groupTypeDisplayMode": {
+              "type": "string",
+              "enum": ["hover", "label", "both"],
+              "enumDescriptions": [
+                "仅悬停时显示",
+                "仅在分组名后面显示",
+                "名称后与悬停都显示"
+              ],
+              "default": "label",
+              "description": "分组类型（手动/正则/引用）的显示位置"
             }
           }
         }

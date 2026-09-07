@@ -1,21 +1,34 @@
 {
-  "version": "1.4.0",
+  "version": "1.5.0",
   "groups": [
     {
       "id": "group-1",
       "name": "我的手动分组",
       "level": 0,
-      "children": ["group-1a"],
+      "children": [
+        "group-1a"
+      ],
       "files": [
         {
           "path": "src/index.ts",
           "alias": "入口",
+          "branch": "feature/markers",
           "markers": [
             {
               "type": "cursor",
               "content": [
-                { "line": 41, "column": 0, "label": "L42" },
-                { "line": 18, "column": 42, "label": "的" }
+                {
+                  "line": 41,
+                  "column": 0,
+                  "label": "L42",
+                  "branch": "feature/markers"
+                },
+                {
+                  "line": 18,
+                  "column": 42,
+                  "label": "的",
+                  "branch": "main"
+                }
               ]
             },
             {
@@ -26,7 +39,8 @@
                   "column": 2,
                   "label": "init",
                   "symbolName": "init",
-                  "symbolKind": 11
+                  "symbolKind": 11,
+                  "branch": "feature/markers"
                 }
               ]
             },
@@ -37,13 +51,18 @@
                   "line": 120,
                   "column": 4,
                   "label": "listStale",
-                  "query": "listStale"
+                  "query": "listStale",
+                  "branch": "feature/markers"
                 }
               ]
             }
           ]
         },
-        { "path": "src/utils.ts", "alias": "utils.ts" }
+        {
+          "path": "src/utils.ts",
+          "alias": "utils.ts",
+          "branch": "main"
+        }
       ]
     },
     {
@@ -52,7 +71,11 @@
       "level": 1,
       "children": [],
       "files": [
-        { "path": "src/helper.ts", "alias": "helper.ts" }
+        {
+          "path": "src/helper.ts",
+          "alias": "helper.ts",
+          "branch": "main"
+        }
       ]
     },
     {
@@ -61,7 +84,11 @@
       "level": 0,
       "children": [],
       "files": [
-        { "path": "server.js", "alias": "server.js" }
+        {
+          "path": "server.js",
+          "alias": "server.js",
+          "branch": "develop"
+        }
       ],
       "configId": "backend-regex"
     },
@@ -71,7 +98,11 @@
       "level": 0,
       "children": [],
       "files": [
-        { "path": "components/Button.tsx", "alias": "Button.tsx" }
+        {
+          "path": "components/Button.tsx",
+          "alias": "Button.tsx",
+          "branch": "feature/ui"
+        }
       ],
       "config": {
         "type": "regex",

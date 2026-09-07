@@ -31,6 +31,8 @@ export interface Group {
 export interface GroupFileEntry {
   path: string;
   alias: string;
+  /** 加入分组时的 Git 分支（可选；旧数据可能没有） */
+  branch?: string;
   /**
    * 按类型分组的标记：
    * [{ type, content: [{ line, column, label, ... }] }, ...]
@@ -46,6 +48,8 @@ export interface FileMarkerItem {
   label: string;
   line: number;
   column: number;
+  /** 添加该标记时的 Git 分支（可选；旧数据可能没有） */
+  branch?: string;
   /** function：符号名 */
   symbolName?: string;
   symbolKind?: number;
@@ -76,15 +80,24 @@ export const CONFIG_RELATIVE_PATH = '.vscode/tab-groups.json';
 /** 标记跳转左下角提示：一直显示 | 按秒数消失 | 关闭 */
 export type MarkerJumpHintMode = 'always' | 'timed' | 'off';
 
+/** 分组类型（手动/正则/引用）显示位置：仅悬停 | 仅名称后 | 都显示 */
+export type GroupTypeDisplayMode = 'hover' | 'label' | 'both';
+
 export interface DisplaySettings {
   markerJumpHintMode: MarkerJumpHintMode;
   /** mode 为 timed 时的显示秒数 */
   markerJumpHintSeconds: number;
+  /** 侧边栏是否展示节点来源分支，默认打开 */
+  showSourceBranch: boolean;
+  /** 分组「手动/正则/引用」后缀如何显示，默认名称后 */
+  groupTypeDisplayMode: GroupTypeDisplayMode;
 }
 
 export const DEFAULT_DISPLAY_SETTINGS: DisplaySettings = {
   markerJumpHintMode: 'always',
   markerJumpHintSeconds: 1,
+  showSourceBranch: true,
+  groupTypeDisplayMode: 'label',
 };
 
 export interface ShortcutSettings {

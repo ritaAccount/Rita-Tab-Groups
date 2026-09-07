@@ -145,7 +145,7 @@ interface ShortcutSettings {
 - 打开文件（跳转展平后的首个标记，无标记则打开文件开头）
 - 从分组中移除
 - 重命名
-- **添加游标** / **添加函数** / **添加字符匹配**（写入对应 `type` 的 `content[]`）
+- **添加游标** / **添加函数** / **添加字符匹配**（写入对应 `type` 的 `content[]`，并记录当时 Git 分支）
 - 复制路径
 
 **标记子节点**（文件 → 类型组 → 标记）：
@@ -172,7 +172,7 @@ interface ShortcutSettings {
 - 布局：左侧设置分类，右侧当前分类内容（对齐 Cursor Settings）
 - 分类：**通用**（默认选中）、**显示**、**快捷键**
 - **通用**：打开 `.vscode/tab-groups.json`（`groups` / `configs`）；**配置版本更新**（比较文件 `version` 与 schema `CONFIG_VERSION`，落后则迁移写回）
-- **显示**：**标记左下角显示** — 下拉 `always`（一直显示，默认）/ `timed`（显示秒数，出现时长行）/ `off`（关闭）；**改完即存** 至 `tabGroups.display`
+- **显示**：**标记左下角显示** — 下拉 `always`（一直显示，默认）/ `timed`（显示秒数，出现时长行）/ `off`（关闭）；**显示来源分支** — 开关（默认开启，侧边栏旁注/悬停）；**分组类型显示** — 下拉 `label`（名称后，默认）/ `hover`（仅悬停）/ `both`（都显示）；**改完即存** 至 `tabGroups.display`
 - **快捷键** 分类：展示可绑定命令及当前快捷键；点击快捷键框后**按键捕获**录入新组合
 - **保存**：显示配置自动写入；快捷键需点保存写入 `tabGroups.shortcuts` 并同步 keybindings
 - **恢复默认**：显示页立即恢复并保存；快捷键页仅预览，需点保存
@@ -234,7 +234,7 @@ interface ShortcutSettings {
 ### 4.3 文件操作
 
 - **加入分组**：将当前活动标签的 URI 转换为相对路径，添加到目标分组的 `files` 数组（避免重复）。
-- **添加游标 / 函数 / 字符匹配**：写入 `markers: [{ type, content: [...] }]`（`cursor`  `function`  `text`）；单击文件打开跳展平后首个标记；上一/下一标记按行循环跳转；上述跳转均会短暂提示标记名称。
+- **添加游标 / 函数 / 字符匹配**：写入 `markers: [{ type, content: [...] }]`（`cursor` / `function` / `text`）；每条 content 与文件条目可带 `branch`（添加时 Git 分支）；单击文件打开跳展平后首个标记；上一/下一标记按行循环跳转；上述跳转均会短暂提示标记名称。
 - **取消分组**：从指定分组的 `files` 中移除该路径；选 **全部分组** 时调用 `removeFileFromAllGroups()` 一次性移除（v2）。
 - **单击树视图文件**：调用 `vscode.window.showTextDocument` 打开。
 - **关闭标签不影响分组**：分组中的文件路径不会因为标签关闭而删除。用户必须显式取消分组或从树视图右键移除。
@@ -329,11 +329,12 @@ src/
 ├── data/                        # 分组数据与持久化
 │   ├── types.ts
 │   ├── tabGroupsManager.ts
-│   ├── fileEntryUtils.ts        # CONFIG_VERSION、别名与 markers 迁移
+│   ├── fileEntryUtils.ts        # CONFIG_VERSION、别名与 markers / branch 迁移
 │   └── groupHierarchyUtils.ts
-├── workspace/                   # 工作区路径与文件存在性
+├── workspace/                   # 工作区路径、文件存在性、Git 分支
 │   ├── workspaceUtils.ts
-│   └── fileExistenceCache.ts
+│   ├── fileExistenceCache.ts
+│   └── gitBranchUtils.ts
 ├── tree/                        # 侧边栏、命令、编辑器打开 / 标记跳转
 │   ├── treeProvider.ts
 │   ├── commands.ts
@@ -465,7 +466,7 @@ media/
 
 | 示例文件                       | 对应实际路径                                                                   |
 | -------------------------- | ------------------------------------------------------------------------ |
-| `example/tab-groups.json`  | 工作区 `.vscode/tab-groups.json`（schema `1.4.0`：嵌套分组、别名、`markers`）          |
+| `example/tab-groups.json`  | 工作区 `.vscode/tab-groups.json`（schema `1.5.0`：嵌套分组、别名、`markers`、`branch`） |
 | `example/settings.json`    | 工作区 `.vscode/settings.json`（`tabGroups.shortcuts` + `tabGroups.display`） |
 | `example/keybindings.json` | 用户 `User/keybindings.json`（保存快捷键时同步，非工作区文件）                              |
 

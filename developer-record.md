@@ -343,7 +343,7 @@ media/shortcuts.js        # 按键捕获逻辑
 |----|------|
 | 设置页 | 左侧分类「显示」；三页统一 Setting Row（左文右控，`pane-inner` max-width） |
 | 交互 | 下拉选模式；仅 `timed` 时出现「显示时长」行；**改完即存**；恢复默认立即写回 |
-| 项 | 「标记左下角显示」：一直显示 / 显示秒数 / 关闭 |
+| 项 | 「标记左下角显示」：一直显示 / 显示秒数 / 关闭；「显示来源分支」（默认开，见 schema 1.5.0 记录） |
 | 默认 | `always`（一直显示） |
 | 存储 | 工作区 `.vscode/settings.json` → `tabGroups.display` |
 | 实现 | `displaySettingsUtils.ts`；跳转读配置；保存 `off` 时立即隐藏状态栏项 |
@@ -379,5 +379,46 @@ media/shortcuts.js        # 按键捕获逻辑
 **`explain.md` 同步（同日补充）**：改某个文件夹里的文件时，若该文件夹已有 `explain.md`，必须更新到与现状一致；改 `src/` 划分时还要更新 `src/explain.md`。没有则不必强行新建；新建功能文件夹时一并写上。
 
 **涉及文件**：`src/explain.md`、`src/**`、`developer-readme.md`、`.cursor/rules/tab-groups.mdc`、`.cursor/rules/docs-maintenance.mdc`、`CLAUDE.md`、`AGENTS.md`
+
+---
+
+### v1.1.1 — 来源分支记录（schema 1.5.0）（2026-09）
+
+| 项 | 决策 |
+|----|------|
+| 动机 | 同一行在不同分支内容可能不同；记录添加时的分支，便于对照 |
+| schema | `CONFIG_VERSION` → `1.5.0`；`version-backup.json` **追加** `1.5.0`（不改旧 bk） |
+| 存储 | 文件条目 `GroupFileEntry.branch?`；标记 `FileMarkerItem.branch?`（可选；旧数据无此字段仍可读） |
+| 写入时机 | 加入文件、扫描新增文件、添加游标/函数/字符匹配时读取当前 Git 分支并写入 |
+| 分支来源 | 优先 `vscode.git` API，失败回退 `git rev-parse`（`workspace/gitBranchUtils.ts`） |
+| 显示设置 | `tabGroups.display.showSourceBranch`，默认 `true`；设置页「显示」开关，改完即存 |
+| 侧边栏 | 开启时 description 前缀截断分支名；tooltip 首行完整「分支：…」 |
+| 右键 | 不单独提供「来源分支」菜单项（悬停树节点即可查看） |
+| 升级 | 旧配置缺 `branch` 不补写；仅升 `version` |
+
+**涉及文件**：`types.ts`、`fileEntryUtils.ts`、`tabGroupsManager.ts`、`gitBranchUtils.ts`、`displaySettingsUtils.ts`、`treeProvider.ts`、`commands.ts`、`settingsWebview.ts`、`extension.ts`、`package.json`、`media/settings.*`、`version-backup.json`、`example/*`、`README.md`、`developer-readme.md`、`src/explain.md`
+
+---
+
+### 来源分支交互调整 — 去掉右键菜单项（2026-09）
+
+| 项 | 决策 |
+|----|------|
+| 原因 | 悬停/旁注已能看到分支，右键「来源分支」重复 |
+| 行为 | 删除 `tabGroups.showSourceBranch` 命令与菜单；保留记录 `branch` 与侧边栏显示开关 |
+
+**涉及文件**：`package.json`、`commands.ts`、`treeProvider.ts`、`displaySettingsUtils.ts`、`settingsWebview.ts`、`extension.ts`、删除 `sourceBranchMenuUtils.ts`、文档
+
+---
+
+### 显示配置 — 分组类型显示位置（2026-09）
+
+| 项 | 决策 |
+|----|------|
+| 设置 | `tabGroups.display.groupTypeDisplayMode`：`label`（名称后，默认）/ `hover`（仅悬停）/ `both`（都显示） |
+| 内容 | 「手动」「正则」「引用：…」等 `getGroupLabelSuffix` 文案 |
+| 交互 | 设置页「显示」下拉，改完即存；改后刷新侧边栏树 |
+
+**涉及文件**：`types.ts`、`displaySettingsUtils.ts`、`treeProvider.ts`、`settingsWebview.ts`、`media/settings.js`、`package.json`、`example/settings.json`、文档
 
 ---

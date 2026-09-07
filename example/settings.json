@@ -12,6 +12,8 @@
   },
   "tabGroups.display": {
     "markerJumpHintMode": "always",
-    "markerJumpHintSeconds": 1
+    "markerJumpHintSeconds": 1,
+    "showSourceBranch": true,
+    "groupTypeDisplayMode": "label"
   }
 }

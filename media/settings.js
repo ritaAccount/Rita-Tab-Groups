@@ -14,11 +14,15 @@
   const modeSelect = document.getElementById('markerJumpHintMode');
   const secondsInput = document.getElementById('markerJumpHintSeconds');
   const secondsRow = document.getElementById('markerJumpHintSecondsRow');
+  const showSourceBranchInput = document.getElementById('showSourceBranch');
+  const groupTypeDisplayModeSelect = document.getElementById('groupTypeDisplayMode');
 
-  /** @type {{ markerJumpHintMode: string, markerJumpHintSeconds: number }} */
+  /** @type {{ markerJumpHintMode: string, markerJumpHintSeconds: number, showSourceBranch: boolean, groupTypeDisplayMode: string }} */
   let displaySettings = {
     markerJumpHintMode: 'always',
     markerJumpHintSeconds: 1,
+    showSourceBranch: true,
+    groupTypeDisplayMode: 'label',
   };
 
   /** @type {ReturnType<typeof setTimeout> | undefined} */
@@ -74,9 +78,19 @@
     if (!Number.isFinite(seconds) || seconds <= 0) {
       seconds = 1;
     }
+    const showSourceBranch =
+      showSourceBranchInput instanceof HTMLInputElement
+        ? showSourceBranchInput.checked
+        : true;
+    const groupTypeDisplayMode =
+      groupTypeDisplayModeSelect instanceof HTMLSelectElement
+        ? groupTypeDisplayModeSelect.value
+        : 'label';
     return {
       markerJumpHintMode: mode,
       markerJumpHintSeconds: seconds,
+      showSourceBranch,
+      groupTypeDisplayMode,
     };
   }
 
@@ -88,6 +102,9 @@
         typeof settings.markerJumpHintSeconds === 'number'
           ? settings.markerJumpHintSeconds
           : 1,
+      showSourceBranch:
+        typeof settings.showSourceBranch === 'boolean' ? settings.showSourceBranch : true,
+      groupTypeDisplayMode: settings.groupTypeDisplayMode || 'label',
     };
 
     if (modeSelect instanceof HTMLSelectElement) {
@@ -95,6 +112,12 @@
     }
     if (secondsInput instanceof HTMLInputElement) {
       secondsInput.value = String(displaySettings.markerJumpHintSeconds);
+    }
+    if (showSourceBranchInput instanceof HTMLInputElement) {
+      showSourceBranchInput.checked = displaySettings.showSourceBranch;
+    }
+    if (groupTypeDisplayModeSelect instanceof HTMLSelectElement) {
+      groupTypeDisplayModeSelect.value = displaySettings.groupTypeDisplayMode;
     }
     syncSecondsRow();
     suppressAutosave = false;
@@ -133,6 +156,14 @@
 
   secondsInput?.addEventListener('input', () => {
     queueAutosave(400);
+  });
+
+  showSourceBranchInput?.addEventListener('change', () => {
+    queueAutosave(0);
+  });
+
+  groupTypeDisplayModeSelect?.addEventListener('change', () => {
+    queueAutosave(0);
   });
 
   openGroupsButton?.addEventListener('click', () => {

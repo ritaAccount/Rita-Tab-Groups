@@ -18,13 +18,13 @@ macOS 上用户快捷键文件大致在：
 
 ## 1. `tab-groups.json`（分组数据）
 
-当前 schema 版本为 **1.4.0**（与扩展内 `CONFIG_VERSION` 一致）。
+当前 schema 版本为 **1.5.0**（与扩展内 `CONFIG_VERSION` 一致）。
 
 ### 首次激活（空文件）
 
 ```json
 {
-  "version": "1.4.0",
+  "version": "1.5.0",
   "groups": [],
   "configs": []
 }
@@ -37,6 +37,7 @@ macOS 上用户快捷键文件大致在：
 | 手动分组 | `group-1`「我的手动分组」，无 `config` / `configId` |
 | 嵌套分组 | `group-1.children` 指向 `group-1a`；子组 `level` 为 1 |
 | 文件别名 | `src/index.ts` 的 `alias` 为「入口」 |
+| 来源分支 | 文件与标记的 `branch`（添加时的 Git 分支） |
 | 三种标记 | `markers`：`cursor`（游标）、`function`（函数）、`text`（字符匹配） |
 | 引用全局配置 | `group-2` 用 `configId: "backend-regex"` |
 | 内嵌正则 | `group-3.config` 直接写正则 |
@@ -71,6 +72,7 @@ macOS 上用户快捷键文件大致在：
 |---|---|
 | `path` | 相对工作区根目录的路径 |
 | `alias` | 侧边栏显示名；默认是文件名，可用「重命名」修改 |
+| `branch` | 可选。加入分组时的 Git 分支名 |
 | `markers` | 可选。按类型分组的书签 |
 
 **标记 `markers[]`**
@@ -80,7 +82,7 @@ macOS 上用户快捷键文件大致在：
 | `type` | `cursor` / `function` / `text` |
 | `content` | 该类型下的多条标记 |
 
-每条 `content` 都有 `line`、`column`（从 0 起算）、`label`。  
+每条 `content` 都有 `line`、`column`（从 0 起算）、`label`；可选 `branch`（添加该标记时的 Git 分支）。  
 `function` 还可有 `symbolName`、`symbolKind`；`text` 还可有 `query`（跳转时做模糊匹配）。
 
 **全局配置 `configs[]`**
@@ -101,7 +103,7 @@ macOS 上用户快捷键文件大致在：
 | 键 | 含义 |
 |---|---|
 | `tabGroups.shortcuts` | 可自定义命令快捷键；保存后同步到本机 `keybindings.json` |
-| `tabGroups.display` | 显示相关；目前是跳转标记时左下角提示 |
+| `tabGroups.display` | 显示相关：标记跳转提示、是否显示来源分支 |
 
 **`tabGroups.shortcuts` 各键**
 
@@ -123,6 +125,8 @@ macOS 上用户快捷键文件大致在：
 |---|---|---|
 | `markerJumpHintMode` | 左下角提示：`always` 一直显示 / `timed` 显示若干秒 / `off` 关闭 | `always` |
 | `markerJumpHintSeconds` | 仅 `timed` 时有效，范围 0.5～60 秒 | `1` |
+| `showSourceBranch` | 是否在侧边栏显示来源分支（旁注截断，悬停看完整名） | `true` |
+| `groupTypeDisplayMode` | 分组类型显示：`label` 名称后 / `hover` 仅悬停 / `both` 都显示 | `label` |
 
 这两项都可在侧边栏标题栏的「设置」里改：显示页改完即存；快捷键页需点保存。
 

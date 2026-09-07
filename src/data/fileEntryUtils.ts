@@ -7,7 +7,7 @@ import {
   GroupFileEntry,
 } from './types';
 
-export const CONFIG_VERSION = '1.4.0';
+export const CONFIG_VERSION = '1.5.0';
 
 export function defaultAliasFromPath(relativePath: string): string {
   return relativePath.split('/').pop() ?? relativePath;
@@ -15,6 +15,24 @@ export function defaultAliasFromPath(relativePath: string): string {
 
 export function defaultCursorLabel(line: number): string {
   return `L${line + 1}`;
+}
+
+/** 规范化分支名；空串视为无 */
+export function normalizeBranchName(value: unknown): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  return trimmed || undefined;
+}
+
+/** 侧边栏 / 菜单里过长分支名截断；完整名放 tooltip */
+export function truncateBranchLabel(branch: string, maxChars = 24): string {
+  const trimmed = branch.trim();
+  if (trimmed.length <= maxChars) {
+    return trimmed;
+  }
+  return `${trimmed.slice(0, Math.max(1, maxChars - 1))}…`;
 }
 
 function readOptionalNumber(value: unknown): number | undefined {
@@ -37,6 +55,7 @@ function normalizeMarkerItem(raw: unknown, type: FileMarkerType): FileMarkerItem
     line?: unknown;
     column?: unknown;
     label?: unknown;
+    branch?: unknown;
     symbolName?: unknown;
     symbolKind?: unknown;
     query?: unknown;
@@ -73,6 +92,10 @@ function normalizeMarkerItem(raw: unknown, type: FileMarkerType): FileMarkerItem
   }
 
   const item: FileMarkerItem = { label, line, column };
+  const branch = normalizeBranchName(candidate.branch);
+  if (branch) {
+    item.branch = branch;
+  }
   if (symbolName) {
     item.symbolName = symbolName;
   }
@@ -217,9 +240,46 @@ export function formatFileLocationSuffix(entry: GroupFileEntry): string {
   return ` · ${flat.length} 处标记`;
 }
 
-export function formatFileEntryDescription(entry: GroupFileEntry, exists: boolean): string {
+export function formatFileEntryDescription(
+  entry: GroupFileEntry,
+  exists: boolean,
+  options?: { showSourceBranch?: boolean },
+): string {
   const pathLabel = exists ? entry.path : `${entry.path}（不存在）`;
-  return `${pathLabel}${formatFileLocationSuffix(entry)}`;
+  const branchPrefix =
+    options?.showSourceBranch && entry.branch
+      ? `${truncateBranchLabel(entry.branch)} · `
+      : '';
+  return `${branchPrefix}${pathLabel}${formatFileLocationSuffix(entry)}`;
+}
+
+export function formatFileEntryTooltip(
+  entry: GroupFileEntry,
+  exists: boolean,
+  options?: { showSourceBranch?: boolean },
+): string {
+  const lines: string[] = [];
+  if (options?.showSourceBranch && entry.branch) {
+    lines.push(`分支：${entry.branch}`);
+  }
+  lines.push(formatFileEntryDescription(entry, exists, { showSourceBranch: false }));
+  return lines.join('\n');
+}
+
+export function formatMarkerTooltip(
+  relativePath: string,
+  marker: FlatFileMarker,
+  options?: { showSourceBranch?: boolean },
+): string {
+  const kindLabel = markerTypeLabel(marker.type);
+  const lines: string[] = [];
+  if (options?.showSourceBranch && marker.item.branch) {
+    lines.push(`分支：${marker.item.branch}`);
+  }
+  lines.push(
+    `${relativePath} · [${kindLabel}] ${marker.item.label} · L${marker.item.line + 1}:${marker.item.column + 1}`,
+  );
+  return lines.join('\n');
 }
 
 export function normalizeFileEntry(raw: unknown): GroupFileEntry | undefined {
@@ -246,6 +306,10 @@ export function normalizeFileEntry(raw: unknown): GroupFileEntry | undefined {
       path,
       alias: alias || defaultAliasFromPath(path),
     };
+    const branch = normalizeBranchName(rawEntry.branch);
+    if (branch) {
+      entry.branch = branch;
+    }
 
     if (rawEntry.markers !== undefined) {
       if (isGroupedMarkers(rawEntry.markers)) {
@@ -325,18 +389,27 @@ export function groupContainsPath(group: Group, filePath: string): boolean {
   return group.files.some((file) => file.path === filePath);
 }
 
-export function buildScannedFiles(existingFiles: GroupFileEntry[], matchedPaths: string[]): GroupFileEntry[] {
+export function buildScannedFiles(
+  existingFiles: GroupFileEntry[],
+  matchedPaths: string[],
+  branch?: string,
+): GroupFileEntry[] {
   const existingByPath = new Map(existingFiles.map((file) => [file.path, file]));
+  const normalizedBranch = normalizeBranchName(branch);
 
   return matchedPaths.sort().map((path) => {
     const existing = existingByPath.get(path);
     if (existing) {
       return { ...existing };
     }
-    return {
+    const entry: GroupFileEntry = {
       path,
       alias: defaultAliasFromPath(path),
     };
+    if (normalizedBranch) {
+      entry.branch = normalizedBranch;
+    }
+    return entry;
   });
 }
 

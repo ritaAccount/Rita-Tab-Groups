@@ -10,7 +10,7 @@ src/
 ├── explain.md                   # 本文件：目录规则（不参与编译）
 ├── extension.ts                 # 唯一允许留在根目录的源码
 ├── data/                        # 分组数据与持久化
-├── workspace/                   # 工作区与磁盘路径
+├── workspace/                   # 工作区、磁盘路径、Git 分支
 ├── tree/                        # 侧边栏、命令、编辑器跳转
 └── settings/                    # 设置页、快捷键、显示配置
 ```
@@ -31,7 +31,7 @@ Webview 静态资源在仓库根的 `media/`，**不要**放进 `src/`。
 | 目录 | 职责 | 现有文件 | 新文件该不该放这里 |
 |------|------|----------|-------------------|
 | `data/` | 类型、`.vscode/tab-groups.json` 读写、文件条目 / 嵌套分组 / schema 版本 | `types.ts`、`tabGroupsManager.ts`、`fileEntryUtils.ts`、`groupHierarchyUtils.ts` | 只动分组 JSON 结构、CRUD、迁移时 |
-| `workspace/` | 单根工作区校验、相对/绝对路径、文件是否存在 | `workspaceUtils.ts`、`fileExistenceCache.ts` | 只与「当前工作区 / 磁盘路径」有关时 |
+| `workspace/` | 单根工作区校验、相对/绝对路径、文件是否存在、当前 Git 分支 | `workspaceUtils.ts`、`fileExistenceCache.ts`、`gitBranchUtils.ts` | 只与「当前工作区 / 磁盘路径 / 仓库分支」有关时 |
 | `tree/` | 侧边栏树、用户命令、批量开/关标签、标记跳转与提示 | `treeProvider.ts`、`commands.ts`、`groupEditorUtils.ts`、`fileLocationUtils.ts` | 新的树节点、右键/快捷命令、编辑器跳转时 |
 | `settings/` | 设置 Webview、快捷键读写与 keybindings 同步、显示配置 | `settingsWebview.ts`、`shortcutUtils.ts`、`displaySettingsUtils.ts` | 设置页新分类、工作区 `tabGroups.*` 配置项时 |
 
@@ -39,7 +39,7 @@ Webview 静态资源在仓库根的 `media/`，**不要**放进 `src/`。
 
 ## 依赖方向
 
-允许：`extension.ts` → 四个子目录；`tree/` / `settings/` → `data/`、`workspace/`；`data/` → `workspace/`（路径）。  
+允许：`extension.ts` → 四个子目录；`tree/` / `settings/` → `data/`、`workspace/`；`tree/` → `settings/`（读显示配置）；`settings/` → `tree/`（标记提示可见性）；`data/` → `workspace/`（路径 / 分支）。  
 避免：`data/`、`workspace/` 去引用 `tree/` 或 `settings/`（不要让数据层依赖 UI）。
 
 同目录用 `./foo`，跨目录用 `../data/types` 这种相对路径。不设 `index.ts` 桶文件。

@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import * as vscode from 'vscode';
+import { getCurrentGitBranch } from '../workspace/gitBranchUtils';
+import { getWorkspaceFolder } from '../workspace/workspaceUtils';
 import {
   buildScannedFiles,
   CONFIG_VERSION,
@@ -7,6 +9,7 @@ import {
   defaultCursorLabel,
   groupContainsPath,
   isVersionLessThan,
+  normalizeBranchName,
   normalizeGroupFiles,
 } from './fileEntryUtils';
 import {
@@ -34,7 +37,6 @@ import {
   RegexConfig,
   TabGroupsData,
 } from './types';
-import { getWorkspaceFolder } from '../workspace/workspaceUtils';
 
 const DEFAULT_MANUAL_CONFIG: ManualConfig = { type: 'manual' };
 
@@ -240,10 +242,15 @@ export class TabGroupsManager {
     if (groupContainsPath(group, filePath)) {
       return false;
     }
-    group.files.push({
+    const entry: GroupFileEntry = {
       path: filePath,
       alias: defaultAliasFromPath(filePath),
-    });
+    };
+    const branch = await getCurrentGitBranch();
+    if (branch) {
+      entry.branch = branch;
+    }
+    group.files.push(entry);
     await this.save();
     return true;
   }
@@ -403,6 +410,7 @@ export class TabGroupsManager {
       symbolName?: string;
       symbolKind?: number;
       query?: string;
+      branch?: string;
     },
   ): Promise<boolean> {
     const entry = this.getFileEntry(groupId, filePath);
@@ -443,6 +451,11 @@ export class TabGroupsManager {
     }
     if (marker.type === 'text') {
       next.query = marker.query?.trim() || label;
+    }
+
+    const branch = normalizeBranchName(marker.branch) ?? (await getCurrentGitBranch());
+    if (branch) {
+      next.branch = branch;
     }
 
     group.content.push(next);
@@ -602,7 +615,8 @@ export class TabGroupsManager {
     if (!group) {
       return;
     }
-    group.files = buildScannedFiles(group.files, matchedPaths);
+    const branch = await getCurrentGitBranch();
+    group.files = buildScannedFiles(group.files, matchedPaths, branch);
     await this.save();
   }
 

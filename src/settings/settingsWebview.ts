@@ -20,21 +20,30 @@ import { getWorkspaceFolder, getWorkspaceInvalidMessage, isValidWorkspace } from
 let panel: vscode.WebviewPanel | undefined;
 let settingsManager: TabGroupsManager | undefined;
 let onConfigUpgraded: (() => void) | undefined;
+let onDisplaySettingsChanged: (() => void) | undefined;
 let extensionVersion = 'unknown';
 
 export function registerSettingsCommands(
   context: vscode.ExtensionContext,
   manager: TabGroupsManager,
-  options?: { onConfigUpgraded?: () => void },
+  options?: { onConfigUpgraded?: () => void; onDisplaySettingsChanged?: () => void },
 ): void {
   settingsManager = manager;
   onConfigUpgraded = options?.onConfigUpgraded;
+  onDisplaySettingsChanged = options?.onDisplaySettingsChanged;
   extensionVersion =
     (context.extension.packageJSON as { version?: string }).version ?? 'unknown';
 
   context.subscriptions.push(
     vscode.commands.registerCommand('tabGroups.openSettings', () => {
       openSettingsWebview(context);
+    }),
+    vscode.workspace.onDidChangeConfiguration((event) => {
+      if (!event.affectsConfiguration('tabGroups.display')) {
+        return;
+      }
+      applyMarkerJumpHintVisibility();
+      onDisplaySettingsChanged?.();
     }),
   );
 }
@@ -141,6 +150,7 @@ async function handleSaveDisplay(
   try {
     const saved = await saveDisplaySettings(display);
     applyMarkerJumpHintVisibility();
+    onDisplaySettingsChanged?.();
     webviewPanel.webview.postMessage({
       type: 'displaySaved',
       display: saved,
@@ -389,8 +399,31 @@ function getWebviewHtml(webview: vscode.Webview, extensionUri: vscode.Uri): stri
 
           <div class="setting-item">
             <div class="setting-text">
+              <div class="setting-title">显示来源分支</div>
+              <div class="setting-desc">侧边栏是否展示添加节点时的 Git 分支（悬停可看完整名）</div>
+            </div>
+            <label class="setting-toggle">
+              <input type="checkbox" id="showSourceBranch" checked>
+              <span>开启</span>
+            </label>
+          </div>
+
+          <div class="setting-item">
+            <div class="setting-text">
+              <div class="setting-title">分组类型显示</div>
+              <div class="setting-desc">「手动 / 正则 / 引用」显示在名称后、悬停，或两处都显示</div>
+            </div>
+            <select id="groupTypeDisplayMode" class="setting-select" aria-label="分组类型显示">
+              <option value="label">名称后面</option>
+              <option value="hover">仅悬停</option>
+              <option value="both">都显示</option>
+            </select>
+          </div>
+
+          <div class="setting-item">
+            <div class="setting-text">
               <div class="setting-title">恢复默认</div>
-              <div class="setting-desc">重置为一直显示</div>
+              <div class="setting-desc">重置显示相关选项</div>
             </div>
             <button type="button" class="secondary" id="resetDisplay">恢复默认</button>
           </div>

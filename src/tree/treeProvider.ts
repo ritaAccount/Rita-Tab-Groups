@@ -1,7 +1,15 @@
 import * as vscode from 'vscode';
 import { FileMarkerType, FlatFileMarker, Group, GroupFileEntry } from '../data/types';
 import { TabGroupsManager } from '../data/tabGroupsManager';
-import { countMarkers, formatFileEntryDescription, markerTypeLabel } from '../data/fileEntryUtils';
+import {
+  countMarkers,
+  formatFileEntryDescription,
+  formatFileEntryTooltip,
+  formatMarkerTooltip,
+  markerTypeLabel,
+  truncateBranchLabel,
+} from '../data/fileEntryUtils';
+import { getDisplaySettings } from '../settings/displaySettingsUtils';
 import { fileExistenceCache } from '../workspace/fileExistenceCache';
 import { isValidWorkspace, toAbsoluteUri } from '../workspace/workspaceUtils';
 
@@ -22,14 +30,22 @@ interface FileDragPayload {
 export class GroupTreeItem extends vscode.TreeItem {
   constructor(
     public readonly group: Group,
-    labelSuffix: string,
+    typeLabel: string,
     isRegex: boolean,
     hasChildren: boolean,
   ) {
-    super(`${group.name}${labelSuffix}`, vscode.TreeItemCollapsibleState.Collapsed);
+    const mode = getDisplaySettings().groupTypeDisplayMode;
+    const showOnLabel = mode === 'label' || mode === 'both';
+    const showOnHover = mode === 'hover' || mode === 'both';
+
+    super(
+      showOnLabel ? `${group.name}${typeLabel}` : group.name,
+      vscode.TreeItemCollapsibleState.Collapsed,
+    );
     this.contextValue = isRegex ? 'groupRegex' : 'group';
     this.iconPath = new vscode.ThemeIcon('folder');
     this.id = `group:${group.id}`;
+    this.tooltip = showOnHover ? `${group.name}${typeLabel}` : group.name;
 
     if (!hasChildren) {
       this.collapsibleState = vscode.TreeItemCollapsibleState.None;
@@ -49,14 +65,15 @@ export class FileTreeItem extends vscode.TreeItem {
       hasMarkers ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None,
     );
     this.relativePath = fileEntry.path;
-    this.description = formatFileEntryDescription(fileEntry, exists);
+    const showSourceBranch = getDisplaySettings().showSourceBranch;
+    this.description = formatFileEntryDescription(fileEntry, exists, { showSourceBranch });
     this.contextValue = exists ? 'file' : 'missingFile';
     this.iconPath = new vscode.ThemeIcon(
       'file',
       exists ? undefined : new vscode.ThemeColor('disabledForeground'),
     );
     this.id = buildFileTreeItemId(groupId, fileEntry.path);
-    this.tooltip = formatFileEntryDescription(fileEntry, exists);
+    this.tooltip = formatFileEntryTooltip(fileEntry, exists, { showSourceBranch });
 
     const uri = toAbsoluteUri(fileEntry.path);
     if (uri) {
@@ -99,10 +116,12 @@ export class MarkerTreeItem extends vscode.TreeItem {
     public readonly marker: FlatFileMarker,
   ) {
     super(marker.item.label, vscode.TreeItemCollapsibleState.None);
+    const showSourceBranch = getDisplaySettings().showSourceBranch;
     this.contextValue = 'marker';
-    const kindLabel = markerTypeLabel(marker.type);
-    this.description = `L${marker.item.line + 1}:${marker.item.column + 1}`;
-    this.tooltip = `${relativePath} · [${kindLabel}] ${marker.item.label} · L${marker.item.line + 1}:${marker.item.column + 1}`;
+    const branchPrefix =
+      showSourceBranch && marker.item.branch ? `${truncateBranchLabel(marker.item.branch)} · ` : '';
+    this.description = `${branchPrefix}L${marker.item.line + 1}:${marker.item.column + 1}`;
+    this.tooltip = formatMarkerTooltip(relativePath, marker, { showSourceBranch });
     this.iconPath = new vscode.ThemeIcon(markerTypeIcon(marker.type));
     this.id = buildMarkerTreeItemId(groupId, relativePath, marker.type, marker.contentIndex);
     this.command = {

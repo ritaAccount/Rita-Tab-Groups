@@ -46,6 +46,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     onConfigUpgraded: () => {
       treeProvider?.refresh();
     },
+    onDisplaySettingsChanged: () => {
+      treeProvider?.refresh();
+    },
   });
 
   context.subscriptions.push(
