@@ -15,5 +15,10 @@
     "markerJumpHintSeconds": 1,
     "showSourceBranch": true,
     "groupTypeDisplayMode": "label"
+  },
+  "tabGroups.search": {
+    "mode": "fuzzy",
+    "include": "",
+    "exclude": ""
   }
 }

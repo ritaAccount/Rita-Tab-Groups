@@ -4,14 +4,14 @@ import { fileExistenceCache } from './workspace/fileExistenceCache';
 import { ensureWorkspaceShortcutSettings, syncKeybindingsFromSettings } from './settings/shortcutUtils';
 import { initializeShortcutSettings, registerSettingsCommands } from './settings/settingsWebview';
 import { TabGroupsManager } from './data/tabGroupsManager';
-import { GroupTreeItem, TabGroupsTreeProvider } from './tree/treeProvider';
+import { TabGroupsTreeProvider } from './tree/treeProvider';
+import { registerSearchView } from './tree/searchView';
 import { CONFIG_RELATIVE_PATH } from './data/types';
 import { registerMarkerJumpHint } from './tree/fileLocationUtils';
-import { getWorkspaceInvalidMessage, isValidWorkspace, toRelativePath } from './workspace/workspaceUtils';
+import { isValidWorkspace, toRelativePath } from './workspace/workspaceUtils';
 
 let manager: TabGroupsManager | undefined;
 let treeProvider: TabGroupsTreeProvider | undefined;
-let treeViewRef: vscode.TreeView<import('./tree/treeProvider').TreeElement> | undefined;
 let configWatcher: vscode.FileSystemWatcher | undefined;
 let workspaceFileWatcher: vscode.FileSystemWatcher | undefined;
 let isReloadingFromDisk = false;
@@ -19,29 +19,10 @@ let isReloadingFromDisk = false;
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   manager = new TabGroupsManager();
   treeProvider = new TabGroupsTreeProvider(manager);
-
-  const treeView = vscode.window.createTreeView('tabGroupsView', {
-    treeDataProvider: treeProvider,
-    dragAndDropController: treeProvider,
-  });
-  treeViewRef = treeView;
-
-  treeView.onDidExpandElement((event) => {
-    if (event.element instanceof GroupTreeItem && treeProvider) {
-      treeProvider.rememberExpanded(event.element.group.id);
-    }
-  });
-
-  treeView.onDidCollapseElement((event) => {
-    if (event.element instanceof GroupTreeItem && treeProvider) {
-      treeProvider.rememberCollapsed(event.element.group.id);
-    }
-  });
-
-  updateTreeViewMessage();
+  const sidebar = registerSearchView(context, treeProvider);
 
   registerMarkerJumpHint(context);
-  registerCommands(context, manager, treeProvider, treeView);
+  registerCommands(context, manager, treeProvider, sidebar);
   registerSettingsCommands(context, manager, {
     onConfigUpgraded: () => {
       treeProvider?.refresh();
@@ -52,7 +33,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   });
 
   context.subscriptions.push(
-    treeView,
     manager.onDidChange(() => {
       if (!isReloadingFromDisk) {
         treeProvider?.refresh();
@@ -60,7 +40,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }),
     vscode.workspace.onDidChangeWorkspaceFolders(async () => {
       fileExistenceCache.clear();
-      updateTreeViewMessage();
       await reloadAll(context);
       await initializeShortcutSettings();
       await syncKeybindingsFromSettings();
@@ -90,13 +69,11 @@ export function deactivate(): void {
   fileExistenceCache.clear();
   manager = undefined;
   treeProvider = undefined;
-  treeViewRef = undefined;
 }
 
 async function reloadAll(context: vscode.ExtensionContext): Promise<void> {
   setupConfigWatcher(context);
   setupWorkspaceFileWatcher(context);
-  updateTreeViewMessage();
 
   if (!isValidWorkspace()) {
     fileExistenceCache.clear();
@@ -105,13 +82,6 @@ async function reloadAll(context: vscode.ExtensionContext): Promise<void> {
   }
 
   await reloadFromDisk();
-}
-
-function updateTreeViewMessage(): void {
-  if (!treeViewRef) {
-    return;
-  }
-  treeViewRef.message = isValidWorkspace() ? undefined : getWorkspaceInvalidMessage();
 }
 
 async function reloadFromDisk(): Promise<void> {

@@ -85,6 +85,20 @@ interface ShortcutSettings {
 - 保存自定义快捷键时，校验格式后更新工作区配置，并**同步至用户** `keybindings.json`（VS Code 不支持工作区级 keybindings 文件）
 - 实际生效的按键绑定在用户 keybindings 中；工作区 settings 为配置来源，可随项目提交
 
+### 2.2 节点搜索配置
+
+存储路径：`<workspaceRoot>/.vscode/settings.json` → `tabGroups.search`
+
+```typescript
+interface SearchSettings {
+  mode: 'fuzzy' | 'exact'; // 默认 fuzzy
+  include: string;         // 包含文件夹，逗号分隔，默认空
+  exclude: string;          // 排除文件夹，逗号分隔，默认空
+}
+```
+
+查询串本身不写入 settings，只在当前窗口的 `workspaceState` 中记住。
+
 ---
 
 
@@ -105,19 +119,26 @@ interface ShortcutSettings {
 **结构**：
 
 ```
-📁 我的手动分组（手动）        <-- 分组节点，括号内显示配置类型
+标签分组                         <-- 标题栏：新建 / 设置
+[ 搜索 (↑↓ 历史) ]               <-- 与分组列表同一视图
+📁 我的手动分组（手动）
    📄 src/index.ts
-   📄 src/utils.ts
-📁 后端逻辑（引用：backend-regex）  <-- 显示引用的全局配置名
-   📄 server.js
-📁 独立正则组（正则）            <-- 内嵌正则
-   📄 db.js
 ```
 
 **侧边栏标题栏（view/title）**：
 
 - 新建分组（需单根工作区，创建**根级**分组）
 - **设置**（始终显示，无工作区限制；打开设置页，含「通用」「快捷键」；保存快捷键/打开配置文件时需单根工作区）
+
+**节点搜索**（与分组列表同在 `tabGroupsView` Webview 内，位于标题下方）：
+
+- 输入框按**已有记录节点的名称**过滤下方树：分组名、文件别名（及文件名）、标记 label（函数还可匹配 `symbolName`）
+- 右侧三个按钮对齐 VS Code 搜索框：**模糊查询**（默认，字符按顺序出现即可）/ **精准查询**（名称需包含完整查询串）/ **设置**
+- 设置展开后可填「包含文件夹」「排除文件夹」（相对工作区的**文件夹**路径，逗号分隔；不是树里的固定节点）。只约束文件节点及其标记；分组名匹配不受文件夹限制。空查询时显示完整树，文件夹条件仅在有查询时生效。填写规则不常驻显示，鼠标停在对应输入框上才出现（对齐 VS Code「files to include」）
+- 设置面板用高度动画展开/收起，列表被一起推下/收回，收起后搜索条贴住分组
+- ↑ / ↓ 翻历史；Enter 写入历史（鼠标停在搜索框上提示该交互）；无匹配时显示「未找到匹配的节点」
+- 匹配项会保留祖先分组并自动展开；匹配到分组名时展示该组子树中通过文件夹过滤的文件
+- 模式与包含/排除写入工作区 `tabGroups.search`；查询串与历史在 `workspaceState`
 
 **分组节点 inline 按钮（＋）**：
 
@@ -271,7 +292,22 @@ interface ShortcutSettings {
 
 **实现文件**：`src/settings/shortcutUtils.ts`、`src/settings/settingsWebview.ts`、`media/settings.`*、`media/shortcuts.*`
 
-### 4.6 数据持久化与同步
+### 4.6 节点搜索（v1.1.1）
+
+
+| 场景 | 行为 |
+| ---- | ---- |
+| 空查询 | 树显示全部节点；不应用包含/排除 |
+| 模糊 | 名称转为小写后，查询字符按顺序出现即可（不必连续） |
+| 精准 | 名称小写后需包含完整查询串 |
+| 包含文件夹 | 仅文件路径等于或位于这些文件夹下的文件/标记可出现在结果中；留空不限制 |
+| 排除文件夹 | 这些文件夹下的文件/标记不出现；分组名命中仍显示该分组 |
+| 浏览 | `showOpenDialog` 选工作区内文件夹，写入相对路径 |
+| 搜索条交互 | 搜索与分组同视图；设置用 max-height 动画推开列表；说明用悬停提示 |
+
+**实现文件**：`src/tree/searchView.ts`、`src/tree/searchFilter.ts`、`src/tree/treeProvider.ts`、`src/tree/fileIconTheme.ts`、`src/settings/searchSettingsUtils.ts`、`media/search.*`、`media/codicons/*`
+
+### 4.7 数据持久化与同步
 
 - 任何修改（增删改分组、文件、配置）都立即写回 JSON 文件。
 - 启动插件时读取 JSON 文件，若文件不存在则创建空结构 `{ groups: [], configs: [] }`。
@@ -290,7 +326,7 @@ interface ShortcutSettings {
 | 用途                | API                                                                                         |
 | ----------------- | ------------------------------------------------------------------------------------------- |
 | 注册命令              | `vscode.commands.registerCommand`                                                           |
-| 树视图               | `vscode.window.createTreeView` + `TreeDataProvider`                                         |
+| 侧边栏列表             | `tabGroupsView` Webview 渲染分组树（数据仍由 `TabGroupsTreeProvider` 提供）                     |
 | 右键菜单贡献            | `package.json` 的 `contributes.menus`                                                        |
 | 快速选择              | `vscode.window.showQuickPick`                                                               |
 | 输入框               | `vscode.window.showInputBox`                                                                |
@@ -304,6 +340,7 @@ interface ShortcutSettings {
 | 标记跳转提示            | 独立 `StatusBarItem`（`registerMarkerJumpHint` / `showMarkerJumpHint`）；配置见 `tabGroups.display` |
 | 工作区配置             | `vscode.workspace.getConfiguration` / `ConfigurationTarget.Workspace`                       |
 | Webview 面板        | `vscode.window.createWebviewPanel`                                                          |
+| 侧边栏                 | `registerWebviewViewProvider`（`tabGroupsView`：搜索条 + 分组列表）                          |
 | 用户 keybindings 读写 | Node.js `fs` + JSONC 简易解析                                                                   |
 
 
@@ -340,15 +377,20 @@ src/
 │   ├── treeProvider.ts
 │   ├── commands.ts
 │   ├── groupEditorUtils.ts
-│   └── fileLocationUtils.ts
-└── settings/                    # 设置页、快捷键、显示配置
+│   ├── fileLocationUtils.ts
+│   ├── searchView.ts            # 侧边栏 Webview（搜索条 + 分组列表）
+│   ├── searchFilter.ts          # 名称模糊/精准 + 文件夹过滤
+│   └── fileIconTheme.ts         # 文件图标主题（与资源管理器一致）
+└── settings/                    # 设置页、快捷键、显示 / 搜索配置
     ├── settingsWebview.ts
     ├── shortcutUtils.ts
-    └── displaySettingsUtils.ts
+    ├── displaySettingsUtils.ts
+    └── searchSettingsUtils.ts  # tabGroups.search
 
 media/
 ├── settings.css / settings.js
 ├── shortcuts.css / shortcuts.js # 快捷键 pane：按键捕获
+├── search.css / search.js      # 侧边栏搜索条
 └── tab-groups.skill.md          # 激活时写入工作区 `.cursor/skills/tab-groups/SKILL.md`
 
 version/                         # 版本信息（不参与运行时）；约定见 explain.md
@@ -449,6 +491,7 @@ version/                         # 版本信息（不参与运行时）；约定
 5. **配置文件热重载**：外部修改或编辑器内保存 `.vscode/tab-groups.json` 后自动重新加载（v1 已实现）。
 6. **快捷键同步（v2）**：同步 `keybindings.json` 时整文件 JSON 重写，原有注释可能丢失；`ctrl+shift+p` 与 VS Code 命令面板默认快捷键冲突，需用户自行改绑。
 7. **设置页快捷键保存**：需单根工作区；无工作区时 Webview 可预览不可保存。
+8. **节点搜索**：只过滤侧边栏已记录的节点，不扫描磁盘；包含/排除是文件夹路径，不是分组节点。
 
 ---
 
@@ -474,7 +517,7 @@ version/                         # 版本信息（不参与运行时）；约定
 | 示例文件                       | 对应实际路径                                                                   |
 | -------------------------- | ------------------------------------------------------------------------ |
 | `example/tab-groups.json`  | 工作区 `.vscode/tab-groups.json`（schema `1.5.0`：嵌套分组、别名、`markers`、`branch`） |
-| `example/settings.json`    | 工作区 `.vscode/settings.json`（`tabGroups.shortcuts` + `tabGroups.display`） |
+| `example/settings.json`    | 工作区 `.vscode/settings.json`（`tabGroups.shortcuts` + `tabGroups.display` + `tabGroups.search`） |
 | `example/keybindings.json` | 用户 `User/keybindings.json`（保存快捷键时同步，非工作区文件）                              |
 
 

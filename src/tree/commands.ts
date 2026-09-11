@@ -2,21 +2,22 @@ import * as vscode from 'vscode';
 import { closeGroupFiles, openGroupFiles } from './groupEditorUtils';
 import { getMatchingActiveEditor, openFileAtMarker, openFileEntry, resolveEnclosingFunctionSymbol, revealMarkerInEditor } from './fileLocationUtils';
 import { TabGroupsManager } from '../data/tabGroupsManager';
-import { FileTreeItem, GroupTreeItem, MarkerTreeItem, MarkerTypeTreeItem, TabGroupsTreeProvider } from './treeProvider';
+import { FileTreeItem, GroupTreeItem, MarkerTreeItem, MarkerTypeTreeItem, TabGroupsTreeProvider, TreeElement } from './treeProvider';
 import { sortFlatMarkersByLine, flattenMarkers, countMarkers } from '../data/fileEntryUtils';
 
-type TabGroupsTreeElement = GroupTreeItem | FileTreeItem | MarkerTypeTreeItem | MarkerTreeItem;
+type TabGroupsTreeElement = TreeElement;
 import {
   ensureValidWorkspace,
   toAbsoluteUri,
   toRelativePath,
 } from '../workspace/workspaceUtils';
+import { TabGroupsSearchViewProvider } from './searchView';
 
 export function registerCommands(
   context: vscode.ExtensionContext,
   manager: TabGroupsManager,
   treeProvider: TabGroupsTreeProvider,
-  treeView: vscode.TreeView<TabGroupsTreeElement>,
+  sidebar: TabGroupsSearchViewProvider,
 ): void {
   const register = (command: string, callback: (...args: any[]) => any) => {
     context.subscriptions.push(vscode.commands.registerCommand(command, callback));
@@ -48,7 +49,7 @@ export function registerCommands(
       return;
     }
 
-    let group = resolveGroupItem(item, treeView)?.group;
+    let group = resolveGroupItem(item, sidebar)?.group;
     if (!group) {
       const rootGroups = manager.getRootGroups();
       if (rootGroups.length === 0) {
@@ -115,7 +116,7 @@ export function registerCommands(
       return;
     }
 
-    const groupItem = resolveGroupItem(item, treeView);
+    const groupItem = resolveGroupItem(item, sidebar);
     if (!groupItem) {
       return;
     }
@@ -141,7 +142,7 @@ export function registerCommands(
       return;
     }
 
-    const groupItem = resolveGroupItem(item, treeView);
+    const groupItem = resolveGroupItem(item, sidebar);
     if (!groupItem) {
       return;
     }
@@ -166,7 +167,7 @@ export function registerCommands(
       return;
     }
 
-    const groupItem = resolveGroupItem(item, treeView);
+    const groupItem = resolveGroupItem(item, sidebar);
     if (!groupItem) {
       return;
     }
@@ -194,7 +195,7 @@ export function registerCommands(
       return;
     }
 
-    const groupItem = resolveGroupItem(item, treeView);
+    const groupItem = resolveGroupItem(item, sidebar);
     if (!groupItem) {
       return;
     }
@@ -221,7 +222,7 @@ export function registerCommands(
       return;
     }
 
-    const groupItem = resolveGroupItem(item, treeView);
+    const groupItem = resolveGroupItem(item, sidebar);
     if (!groupItem) {
       return;
     }
@@ -237,7 +238,7 @@ export function registerCommands(
       return;
     }
 
-    const groupItem = resolveGroupItem(item, treeView);
+    const groupItem = resolveGroupItem(item, sidebar);
     if (!groupItem) {
       return;
     }
@@ -268,7 +269,7 @@ export function registerCommands(
       return;
     }
 
-    const groupItem = resolveGroupItem(item, treeView);
+    const groupItem = resolveGroupItem(item, sidebar);
     if (!groupItem) {
       return;
     }
@@ -325,7 +326,7 @@ export function registerCommands(
       return;
     }
 
-    const groupItem = resolveGroupItem(item, treeView);
+    const groupItem = resolveGroupItem(item, sidebar);
     if (!groupItem) {
       return;
     }
@@ -380,6 +381,7 @@ export function registerCommands(
 
   register('tabGroups.openFile', async (item?: FileTreeItem) => {
     const folder = await ensureValidWorkspace();
+    item = resolveFileItem(item, sidebar);
     if (!folder || !item) {
       return;
     }
@@ -392,7 +394,8 @@ export function registerCommands(
 
   register('tabGroups.openMarker', async (item?: MarkerTreeItem) => {
     const folder = await ensureValidWorkspace();
-    if (!folder || !(item instanceof MarkerTreeItem)) {
+    item = item instanceof MarkerTreeItem ? item : asMarker(sidebar.getSelection());
+    if (!folder || !item) {
       return;
     }
 
@@ -418,7 +421,7 @@ export function registerCommands(
       return;
     }
 
-    const target = await resolveAddMarkerTarget(item, manager, treeView);
+    const target = await resolveAddMarkerTarget(item, manager, sidebar);
     if (!target) {
       return;
     }
@@ -449,7 +452,7 @@ export function registerCommands(
       return;
     }
 
-    const target = await resolveAddMarkerTarget(item, manager, treeView);
+    const target = await resolveAddMarkerTarget(item, manager, sidebar);
     if (!target) {
       return;
     }
@@ -492,7 +495,7 @@ export function registerCommands(
       return;
     }
 
-    const target = await resolveAddMarkerTarget(item, manager, treeView);
+    const target = await resolveAddMarkerTarget(item, manager, sidebar);
     if (!target) {
       return;
     }
@@ -541,7 +544,8 @@ export function registerCommands(
 
   register('tabGroups.deleteMarker', async (item?: MarkerTreeItem) => {
     const folder = await ensureValidWorkspace();
-    if (!folder || !(item instanceof MarkerTreeItem)) {
+    item = item instanceof MarkerTreeItem ? item : asMarker(sidebar.getSelection());
+    if (!folder || !item) {
       return;
     }
 
@@ -565,7 +569,8 @@ export function registerCommands(
 
   register('tabGroups.renameMarker', async (item?: MarkerTreeItem) => {
     const folder = await ensureValidWorkspace();
-    if (!folder || !(item instanceof MarkerTreeItem)) {
+    item = item instanceof MarkerTreeItem ? item : asMarker(sidebar.getSelection());
+    if (!folder || !item) {
       return;
     }
 
@@ -607,6 +612,7 @@ export function registerCommands(
 
   register('tabGroups.removeFile', async (item?: FileTreeItem) => {
     const folder = await ensureValidWorkspace();
+    item = resolveFileItem(item, sidebar);
     if (!folder || !item) {
       return;
     }
@@ -618,6 +624,7 @@ export function registerCommands(
 
   register('tabGroups.copyPath', async (item?: FileTreeItem) => {
     const folder = await ensureValidWorkspace();
+    item = resolveFileItem(item, sidebar);
     if (!folder || !item) {
       return;
     }
@@ -628,6 +635,7 @@ export function registerCommands(
 
   register('tabGroups.renameFile', async (item?: FileTreeItem) => {
     const folder = await ensureValidWorkspace();
+    item = resolveFileItem(item, sidebar);
     if (!folder || !item) {
       return;
     }
@@ -761,12 +769,12 @@ export function registerCommands(
 
 function resolveGroupItem(
   item: GroupTreeItem | undefined,
-  treeView: vscode.TreeView<TabGroupsTreeElement>,
+  sidebar: TabGroupsSearchViewProvider,
 ): GroupTreeItem | undefined {
   if (item instanceof GroupTreeItem) {
     return item;
   }
-  const selection = treeView.selection[0];
+  const selection = sidebar.getSelection();
   if (selection instanceof GroupTreeItem) {
     return selection;
   }
@@ -782,9 +790,9 @@ interface AddMarkerTarget {
 async function resolveAddMarkerTarget(
   item: FileTreeItem | undefined,
   manager: TabGroupsManager,
-  treeView: vscode.TreeView<TabGroupsTreeElement>,
+  sidebar: TabGroupsSearchViewProvider,
 ): Promise<AddMarkerTarget | undefined> {
-  const fileItem = resolveFileItem(item, treeView);
+  const fileItem = resolveFileItem(item, sidebar);
   if (fileItem) {
     return {
       groupId: fileItem.groupId,
@@ -841,16 +849,20 @@ async function resolveAddMarkerTarget(
 
 function resolveFileItem(
   item: FileTreeItem | undefined,
-  treeView: vscode.TreeView<TabGroupsTreeElement>,
+  sidebar: TabGroupsSearchViewProvider,
 ): FileTreeItem | undefined {
   if (item instanceof FileTreeItem) {
     return item;
   }
-  const selection = treeView.selection[0];
+  const selection = sidebar.getSelection();
   if (selection instanceof FileTreeItem) {
     return selection;
   }
   return undefined;
+}
+
+function asMarker(item: TreeElement | undefined): MarkerTreeItem | undefined {
+  return item instanceof MarkerTreeItem ? item : undefined;
 }
 
 async function jumpMarker(manager: TabGroupsManager, direction: 'prev' | 'next'): Promise<void> {

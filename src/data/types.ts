@@ -100,6 +100,24 @@ export const DEFAULT_DISPLAY_SETTINGS: DisplaySettings = {
   groupTypeDisplayMode: 'label',
 };
 
+/** 侧边栏节点搜索：模糊 | 精准 */
+export type SearchMode = 'fuzzy' | 'exact';
+
+export interface SearchSettings {
+  /** 名称匹配方式，默认模糊 */
+  mode: SearchMode;
+  /** 包含的文件夹（相对工作区，逗号分隔）；留空表示不限制 */
+  include: string;
+  /** 排除的文件夹（相对工作区，逗号分隔） */
+  exclude: string;
+}
+
+export const DEFAULT_SEARCH_SETTINGS: SearchSettings = {
+  mode: 'fuzzy',
+  include: '',
+  exclude: '',
+};
+
 export interface ShortcutSettings {
   addToGroup: string;
   removeFromGroup: string;

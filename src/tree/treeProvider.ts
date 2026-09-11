@@ -10,6 +10,14 @@ import {
   truncateBranchLabel,
 } from '../data/fileEntryUtils';
 import { getDisplaySettings } from '../settings/displaySettingsUtils';
+import {
+  TreeSearchFilter,
+  TreeSearchIndex,
+  buildFileSearchKey,
+  buildMarkerSearchKey,
+  buildMarkerTypeSearchKey,
+  buildTreeSearchIndex,
+} from './searchFilter';
 import { fileExistenceCache } from '../workspace/fileExistenceCache';
 import { isValidWorkspace, toAbsoluteUri } from '../workspace/workspaceUtils';
 
@@ -17,6 +25,28 @@ import { isValidWorkspace, toAbsoluteUri } from '../workspace/workspaceUtils';
 const MARKER_TYPE_ORDER: FileMarkerType[] = ['cursor', 'function', 'text'];
 
 export type TreeElement = GroupTreeItem | FileTreeItem | MarkerTypeTreeItem | MarkerTreeItem;
+
+export type SidebarIcon =
+  | { kind: 'codicon'; id: string }
+  | { kind: 'font'; fontId: string; character: string; color?: string; size?: string }
+  | { kind: 'image'; uri: string };
+
+export interface SidebarTreeNode {
+  id: string;
+  kind: 'group' | 'file' | 'markerType' | 'marker';
+  label: string;
+  description?: string;
+  tooltip?: string;
+  contextValue: string;
+  collapsible: boolean;
+  expanded: boolean;
+  missing?: boolean;
+  groupId?: string;
+  filePath?: string;
+  iconId?: string;
+  icon?: SidebarIcon;
+  children?: SidebarTreeNode[];
+}
 
 /** 须与 package.json views.id 完全一致 */
 const TREE_VIEW_MIME = 'application/vnd.code.tree.tabGroupsView';
@@ -164,11 +194,30 @@ export class TabGroupsTreeProvider
   readonly dragMimeTypes = [TREE_VIEW_MIME, FILE_DRAG_MIME];
 
   private expandedGroupIds = new Set<string>();
+  private expandedNodeIds = new Set<string>();
+  private sidebarElements = new Map<string, TreeElement>();
+  private searchFilter: TreeSearchFilter | undefined;
 
   constructor(private readonly manager: TabGroupsManager) {}
 
   refresh(): void {
     this.onDidChangeTreeDataEmitter.fire(undefined);
+  }
+
+  setSearchFilter(filter: TreeSearchFilter | undefined): void {
+    this.searchFilter = filter;
+    this.refresh();
+  }
+
+  getSearchEmptyMessage(): string | undefined {
+    const index = this.getSearchIndex();
+    if (!index) {
+      return undefined;
+    }
+    if (index.groupIds.size === 0) {
+      return '未找到匹配的节点';
+    }
+    return undefined;
   }
 
   rememberExpanded(groupId: string): void {
@@ -177,6 +226,55 @@ export class TabGroupsTreeProvider
 
   rememberCollapsed(groupId: string): void {
     this.expandedGroupIds.delete(groupId);
+  }
+
+  async getSidebarTree(): Promise<SidebarTreeNode[]> {
+    this.sidebarElements.clear();
+    const roots = await this.getChildren();
+    return Promise.all(roots.map((element) => this.serializeSidebarNode(element)));
+  }
+
+  getSidebarElement(id: string): TreeElement | undefined {
+    return this.sidebarElements.get(id);
+  }
+
+  setNodeExpanded(itemId: string, expanded: boolean): void {
+    if (itemId.startsWith('group:')) {
+      const groupId = itemId.slice('group:'.length);
+      if (expanded) {
+        this.rememberExpanded(groupId);
+      } else {
+        this.rememberCollapsed(groupId);
+      }
+    } else if (expanded) {
+      this.expandedNodeIds.add(itemId);
+    } else {
+      this.expandedNodeIds.delete(itemId);
+    }
+    this.refresh();
+  }
+
+  async dropOnSidebar(
+    targetId: string | undefined,
+    payload: { groupIds?: string[]; files?: Array<{ groupId: string; path: string }> },
+  ): Promise<void> {
+    const dataTransfer = new vscode.DataTransfer();
+    if (payload.files && payload.files.length > 0) {
+      dataTransfer.set(FILE_DRAG_MIME, new vscode.DataTransferItem(payload.files));
+    }
+    if (payload.groupIds && payload.groupIds.length > 0) {
+      const groups = payload.groupIds
+        .map((id) => this.getGroupTreeItem(id))
+        .filter((item): item is GroupTreeItem => item !== undefined);
+      dataTransfer.set(TREE_VIEW_MIME, new vscode.DataTransferItem(groups));
+    }
+    const target = targetId ? this.getSidebarElement(targetId) : undefined;
+    const tokenSource = new vscode.CancellationTokenSource();
+    try {
+      await this.handleDrop(target, dataTransfer, tokenSource.token);
+    } finally {
+      tokenSource.dispose();
+    }
   }
 
   getExpandedGroupIds(): Set<string> {
@@ -383,14 +481,28 @@ export class TabGroupsTreeProvider
   }
 
   async getChildren(element?: TreeElement): Promise<TreeElement[]> {
+    const index = this.getSearchIndex();
+
     if (!element) {
-      return this.manager.getRootGroups().map((group) => this.createGroupTreeItem(group));
+      return this.manager
+        .getRootGroups()
+        .filter((group) => !index || index.groupIds.has(group.id))
+        .map((group) => this.createGroupTreeItem(group, index));
     }
 
     if (element instanceof GroupTreeItem) {
-      const childGroups = this.manager.getChildGroups(element.group.id).map((group) => this.createGroupTreeItem(group));
+      const childGroups = this.manager
+        .getChildGroups(element.group.id)
+        .filter((group) => !index || index.groupIds.has(group.id))
+        .map((group) => this.createGroupTreeItem(group, index));
+      const files = element.group.files.filter((fileEntry) => {
+        if (!index) {
+          return true;
+        }
+        return index.fileKeys.has(buildFileSearchKey(element.group.id, fileEntry.path));
+      });
       const fileItems = await Promise.all(
-        element.group.files.map(async (fileEntry) => {
+        files.map(async (fileEntry) => {
           const exists = await fileExistenceCache.exists(fileEntry.path);
           return new FileTreeItem(element.group.id, fileEntry, exists);
         }),
@@ -400,7 +512,18 @@ export class TabGroupsTreeProvider
     }
 
     if (element instanceof FileTreeItem) {
-      return listPresentMarkerTypes(element.fileEntry).map(
+      const types = listPresentMarkerTypes(element.fileEntry).filter(({ type }) => {
+        if (!index) {
+          return true;
+        }
+        if (index.filesWithAllMarkers.has(buildFileSearchKey(element.groupId, element.relativePath))) {
+          return true;
+        }
+        return index.markerTypeKeys.has(
+          buildMarkerTypeSearchKey(element.groupId, element.relativePath, type),
+        );
+      });
+      return types.map(
         ({ type, count }) =>
           new MarkerTypeTreeItem(element.groupId, element.relativePath, type, count),
       );
@@ -412,14 +535,32 @@ export class TabGroupsTreeProvider
       if (!group) {
         return [];
       }
-      return group.content.map(
-        (item, contentIndex) =>
-          new MarkerTreeItem(element.groupId, element.relativePath, {
-            type: element.markerType,
-            contentIndex,
-            item,
-          }),
-      );
+      const showAll =
+        !index ||
+        index.filesWithAllMarkers.has(buildFileSearchKey(element.groupId, element.relativePath));
+      return group.content
+        .map((item, contentIndex) => ({ item, contentIndex }))
+        .filter(({ contentIndex }) => {
+          if (showAll) {
+            return true;
+          }
+          return index!.markerKeys.has(
+            buildMarkerSearchKey(
+              element.groupId,
+              element.relativePath,
+              element.markerType,
+              contentIndex,
+            ),
+          );
+        })
+        .map(
+          ({ item, contentIndex }) =>
+            new MarkerTreeItem(element.groupId, element.relativePath, {
+              type: element.markerType,
+              contentIndex,
+              item,
+            }),
+        );
     }
 
     return [];
@@ -430,20 +571,121 @@ export class TabGroupsTreeProvider
     if (!group) {
       return undefined;
     }
-    return this.createGroupTreeItem(group);
+    return this.createGroupTreeItem(group, this.getSearchIndex());
   }
 
-  private createGroupTreeItem(group: Group): GroupTreeItem {
+  private getSearchIndex(): TreeSearchIndex | undefined {
+    if (!this.searchFilter) {
+      return undefined;
+    }
+    return buildTreeSearchIndex(this.manager.getGroups(), this.searchFilter);
+  }
+
+  private createGroupTreeItem(group: Group, index?: TreeSearchIndex): GroupTreeItem {
     const suffix = this.manager.getGroupLabelSuffix(group);
     const isRegex = this.manager.isRegexGroup(group);
-    const hasChildren = group.children.length > 0 || group.files.length > 0;
+    const hasChildren = index
+      ? this.manager.getChildGroups(group.id).some((child) => index.groupIds.has(child.id)) ||
+        group.files.some((file) => index.fileKeys.has(buildFileSearchKey(group.id, file.path)))
+      : group.children.length > 0 || group.files.length > 0;
     const item = new GroupTreeItem(group, suffix, isRegex, hasChildren);
 
-    if (this.expandedGroupIds.has(group.id) && hasChildren) {
+    const shouldExpand =
+      (index?.expandGroupIds.has(group.id) ?? false) || this.expandedGroupIds.has(group.id);
+    if (shouldExpand && hasChildren) {
       item.collapsibleState = vscode.TreeItemCollapsibleState.Expanded;
     }
     return item;
   }
+
+  private async serializeSidebarNode(element: TreeElement): Promise<SidebarTreeNode> {
+    const item = this.getTreeItem(element);
+    const id = String(item.id ?? '');
+    this.sidebarElements.set(id, element);
+
+    const collapsible = item.collapsibleState !== vscode.TreeItemCollapsibleState.None;
+    const expanded =
+      item.collapsibleState === vscode.TreeItemCollapsibleState.Expanded ||
+      this.expandedNodeIds.has(id);
+    const label = typeof item.label === 'string' ? item.label : item.label?.label ?? '';
+    const description = typeof item.description === 'string' ? item.description : undefined;
+    const tooltip = typeof item.tooltip === 'string' ? item.tooltip : undefined;
+
+    const node: SidebarTreeNode = {
+      id,
+      kind: sidebarKind(element),
+      label,
+      description,
+      tooltip,
+      contextValue: item.contextValue ?? '',
+      collapsible,
+      expanded: collapsible && expanded,
+      missing: element instanceof FileTreeItem && element.contextValue === 'missingFile',
+      groupId: sidebarGroupId(element),
+      filePath: sidebarFilePath(element),
+      iconId: sidebarIconId(element, collapsible && expanded),
+    };
+
+    if (node.expanded) {
+      const children = await this.getChildren(element);
+      node.children = await Promise.all(children.map((child) => this.serializeSidebarNode(child)));
+    }
+
+    return node;
+  }
+}
+
+function sidebarKind(element: TreeElement): SidebarTreeNode['kind'] {
+  if (element instanceof GroupTreeItem) {
+    return 'group';
+  }
+  if (element instanceof FileTreeItem) {
+    return 'file';
+  }
+  if (element instanceof MarkerTypeTreeItem) {
+    return 'markerType';
+  }
+  return 'marker';
+}
+
+function sidebarGroupId(element: TreeElement): string | undefined {
+  if (element instanceof GroupTreeItem) {
+    return element.group.id;
+  }
+  if (
+    element instanceof FileTreeItem ||
+    element instanceof MarkerTypeTreeItem ||
+    element instanceof MarkerTreeItem
+  ) {
+    return element.groupId;
+  }
+  return undefined;
+}
+
+function sidebarFilePath(element: TreeElement): string | undefined {
+  if (element instanceof FileTreeItem) {
+    return element.relativePath;
+  }
+  if (element instanceof MarkerTypeTreeItem || element instanceof MarkerTreeItem) {
+    return element.relativePath;
+  }
+  return undefined;
+}
+
+function sidebarIconId(element: TreeElement, expanded: boolean): string {
+  if (element instanceof GroupTreeItem) {
+    return expanded ? 'folder-opened' : 'folder';
+  }
+  if (element instanceof FileTreeItem) {
+    return 'file';
+  }
+  if (element instanceof MarkerTypeTreeItem) {
+    return markerTypeIcon(element.markerType);
+  }
+  if (element instanceof MarkerTreeItem) {
+    return markerTypeIcon(element.markerType);
+  }
+  return 'file';
 }
 
 export function buildFileTreeItemId(groupId: string, relativePath: string): string {

@@ -118,6 +118,38 @@
               "description": "分组类型（手动/正则/引用）的显示位置"
             }
           }
+        },
+        "tabGroups.search": {
+          "type": "object",
+          "scope": "resource",
+          "description": "侧边栏节点搜索（模糊/精准，以及包含/排除文件夹）",
+          "default": {
+            "mode": "fuzzy",
+            "include": "",
+            "exclude": ""
+          },
+          "properties": {
+            "mode": {
+              "type": "string",
+              "enum": ["fuzzy", "exact"],
+              "enumDescriptions": [
+                "模糊查询：名称中按顺序出现查询字符即可",
+                "精准查询：名称需包含完整查询串"
+              ],
+              "default": "fuzzy",
+              "description": "按节点名称搜索时的匹配方式"
+            },
+            "include": {
+              "type": "string",
+              "default": "",
+              "description": "搜索时包含的文件夹（相对工作区根目录，逗号分隔）；留空表示不限制"
+            },
+            "exclude": {
+              "type": "string",
+              "default": "",
+              "description": "搜索时排除的文件夹（相对工作区根目录，逗号分隔）"
+            }
+          }
         }
       }
     },
@@ -133,9 +165,9 @@
     "views": {
       "tab-groups": [
         {
+          "type": "webview",
           "id": "tabGroupsView",
-          "name": "标签分组",
-          "canSelectMany": true
+          "name": "标签分组"
         }
       ]
     },
@@ -419,6 +451,103 @@
         {
           "command": "tabGroups.copyPath",
           "when": "view == tabGroupsView && (viewItem == file || viewItem == missingFile) && workspaceFolderCount == 1",
+          "group": "1_file@5"
+        }
+      ],
+      "webview/context": [
+        {
+          "command": "tabGroups.deleteGroup",
+          "when": "webviewId == tabGroupsView && webviewItem == group && workspaceFolderCount == 1",
+          "group": "1_group@1"
+        },
+        {
+          "command": "tabGroups.renameGroup",
+          "when": "webviewId == tabGroupsView && webviewItem == group && workspaceFolderCount == 1",
+          "group": "1_group@2"
+        },
+        {
+          "command": "tabGroups.createSubGroup",
+          "when": "webviewId == tabGroupsView && (webviewItem == group || webviewItem == groupRegex) && workspaceFolderCount == 1",
+          "group": "1_group@25"
+        },
+        {
+          "command": "tabGroups.expandAll",
+          "when": "webviewId == tabGroupsView && (webviewItem == group || webviewItem == groupRegex) && workspaceFolderCount == 1",
+          "group": "1_group@3"
+        },
+        {
+          "command": "tabGroups.collapseAll",
+          "when": "webviewId == tabGroupsView && (webviewItem == group || webviewItem == groupRegex) && workspaceFolderCount == 1",
+          "group": "1_group@4"
+        },
+        {
+          "command": "tabGroups.setManual",
+          "when": "webviewId == tabGroupsView && webviewItem == group && workspaceFolderCount == 1",
+          "group": "2_config@1"
+        },
+        {
+          "command": "tabGroups.setRegex",
+          "when": "webviewId == tabGroupsView && webviewItem == group && workspaceFolderCount == 1",
+          "group": "2_config@2"
+        },
+        {
+          "command": "tabGroups.setGlobalConfig",
+          "when": "webviewId == tabGroupsView && webviewItem == group && workspaceFolderCount == 1",
+          "group": "2_config@3"
+        },
+        {
+          "command": "tabGroups.manageGlobalConfigs",
+          "when": "webviewId == tabGroupsView && webviewItem == group && workspaceFolderCount == 1",
+          "group": "2_config@4"
+        },
+        {
+          "command": "tabGroups.scanFiles",
+          "when": "webviewId == tabGroupsView && webviewItem == groupRegex && workspaceFolderCount == 1",
+          "group": "3_scan@1"
+        },
+        {
+          "command": "tabGroups.openFile",
+          "when": "webviewId == tabGroupsView && webviewItem == file && workspaceFolderCount == 1",
+          "group": "1_file@1"
+        },
+        {
+          "command": "tabGroups.removeFile",
+          "when": "webviewId == tabGroupsView && (webviewItem == file || webviewItem == missingFile) && workspaceFolderCount == 1",
+          "group": "1_file@2"
+        },
+        {
+          "command": "tabGroups.renameFile",
+          "when": "webviewId == tabGroupsView && (webviewItem == file || webviewItem == missingFile) && workspaceFolderCount == 1",
+          "group": "1_file@3"
+        },
+        {
+          "command": "tabGroups.addCursor",
+          "when": "webviewId == tabGroupsView && webviewItem == file && workspaceFolderCount == 1",
+          "group": "1_file@4"
+        },
+        {
+          "command": "tabGroups.addFunction",
+          "when": "webviewId == tabGroupsView && webviewItem == file && workspaceFolderCount == 1",
+          "group": "1_file@45"
+        },
+        {
+          "command": "tabGroups.addText",
+          "when": "webviewId == tabGroupsView && webviewItem == file && workspaceFolderCount == 1",
+          "group": "1_file@46"
+        },
+        {
+          "command": "tabGroups.deleteMarker",
+          "when": "webviewId == tabGroupsView && webviewItem == marker && workspaceFolderCount == 1",
+          "group": "1_marker@1"
+        },
+        {
+          "command": "tabGroups.renameMarker",
+          "when": "webviewId == tabGroupsView && webviewItem == marker && workspaceFolderCount == 1",
+          "group": "1_marker@2"
+        },
+        {
+          "command": "tabGroups.copyPath",
+          "when": "webviewId == tabGroupsView && (webviewItem == file || webviewItem == missingFile) && workspaceFolderCount == 1",
           "group": "1_file@5"
         }
       ],

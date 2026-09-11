@@ -463,3 +463,29 @@ media/shortcuts.js        # 按键捕获逻辑
 **涉及文件**：`version/**`、`AGENTS.md`、`CLAUDE.md`、`.cursor/rules/docs-maintenance.mdc`、`src/explain.md`、`developer-readme.md`
 
 ---
+
+### 侧边栏节点搜索（2026-09）
+
+| 项 | 决策 |
+|----|------|
+| 目标 | 按已有记录节点的**名称**快速查找（分组 / 文件别名与文件名 / 标记） |
+| 位置 | 「标签分组」标题下方搜索条（`tabGroupsSearchView` Webview）；树视图改名为「分组」 |
+| 交互 | 对齐 VS Code 搜索框：输入框 + 右侧 **模糊** / **精准** / **设置**；设置展开包含/排除文件夹（相对工作区的文件夹，不是树节点） |
+| 匹配 | 模糊：小写后字符按顺序出现；精准：小写后包含完整查询串；不区分大小写 |
+| 文件夹过滤 | 仅有查询词时生效；约束文件节点及其标记；分组名命中仍显示该组，子文件仍过文件夹过滤 |
+| 持久化 | `tabGroups.search`（mode / include / exclude）写入工作区 settings；查询与历史在 `workspaceState` |
+| 空结果 | 树视图 `message`：「未找到匹配的节点」 |
+
+### 搜索条交互（2026-09-08）
+
+| 项 | 决策 |
+|----|------|
+| 收起留白 | 搜索与分组放进同一个 `tabGroupsView` Webview，不再用第二条视图「分组」；收起设置后面板高度为 0，列表贴住搜索条 |
+| 展开动画 | 设置用 `max-height` 过渡，完整露出包含/排除行，同时把下方分组列表推开 |
+| 搜索框提示 | 占位仍为「搜索 (↑↓ 历史)」；鼠标停在框上（或聚焦）提示 Enter 写入历史 |
+| 文件夹规则 | 「只搜索这些文件夹…」等说明改为输入框悬停提示，对齐 VS Code files to include |
+| 树缩进 | 层级左边距不能用行内 `style`（Webview CSP 会丢掉）；改用 `data-depth` + CSS，每层 16px |
+| 树图标 | 分组/标记用 Codicon；文件走当前 `workbench.iconTheme`（Seti 等），与资源管理器同类图标 |
+
+**涉及文件**：`package.json`、`src/tree/searchView.ts`、`src/tree/searchFilter.ts`、`src/tree/treeProvider.ts`、`src/settings/searchSettingsUtils.ts`、`src/extension.ts`、`src/data/types.ts`、`media/search.*`、`example/settings.json`、文档
+

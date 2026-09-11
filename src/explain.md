@@ -12,7 +12,7 @@ src/
 ├── data/                        # 分组数据与持久化
 ├── workspace/                   # 工作区、磁盘路径、Git 分支
 ├── tree/                        # 侧边栏、命令、编辑器跳转
-└── settings/                    # 设置页、快捷键、显示配置
+└── settings/                    # 设置页、快捷键、显示 / 搜索配置
 ```
 
 Webview 静态资源在仓库根的 `media/`，**不要**放进 `src/`。
@@ -32,8 +32,8 @@ Webview 静态资源在仓库根的 `media/`，**不要**放进 `src/`。
 |------|------|----------|-------------------|
 | `data/` | 类型、`.vscode/tab-groups.json` 读写、文件条目 / 嵌套分组 / schema 版本 | `types.ts`、`tabGroupsManager.ts`、`fileEntryUtils.ts`、`groupHierarchyUtils.ts` | 只动分组 JSON 结构、CRUD、迁移时 |
 | `workspace/` | 单根工作区校验、相对/绝对路径、文件是否存在、当前 Git 分支、AI Skill 初始化 | `workspaceUtils.ts`、`fileExistenceCache.ts`、`gitBranchUtils.ts`、`aiGuideUtils.ts` | 只与「当前工作区 / 磁盘路径 / 仓库分支 / 写入工作区引导文件」有关时 |
-| `tree/` | 侧边栏树、用户命令、批量开/关标签、标记跳转与提示 | `treeProvider.ts`、`commands.ts`、`groupEditorUtils.ts`、`fileLocationUtils.ts` | 新的树节点、右键/快捷命令、编辑器跳转时 |
-| `settings/` | 设置 Webview、快捷键读写与 keybindings 同步、显示配置 | `settingsWebview.ts`、`shortcutUtils.ts`、`displaySettingsUtils.ts` | 设置页新分类、工作区 `tabGroups.*` 配置项时 |
+| `tree/` | 侧边栏树、用户命令、批量开/关标签、标记跳转与提示、侧边栏搜索+列表 | `treeProvider.ts`、`commands.ts`、`groupEditorUtils.ts`、`fileLocationUtils.ts`、`searchView.ts`、`searchFilter.ts`、`fileIconTheme.ts` | 新的树节点、右键/快捷命令、编辑器跳转、侧边栏搜索时 |
+| `settings/` | 设置 Webview、快捷键读写与 keybindings 同步、显示配置、搜索配置 | `settingsWebview.ts`、`shortcutUtils.ts`、`displaySettingsUtils.ts`、`searchSettingsUtils.ts` | 设置页新分类、工作区 `tabGroups.*` 配置项时 |
 
 `CONFIG_VERSION` 只定义在 `data/fileEntryUtils.ts`。改 schema 必须新建 `version/tab-groups/<新版本>/`（`changes.json` + `example.json`，只追加）。  
 `AI_GUIDE_VERSION` 在 `workspace/aiGuideUtils.ts`；改 Skill 必须新建 `version/skill/<新版本>/`（`changes.json` + 完整 example）。约定见 `version/explain.md`。
