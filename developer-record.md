@@ -529,3 +529,13 @@ media/shortcuts.js        # 按键捕获逻辑
 
 **涉及文件**：`package.json`、`package-lock.json`、`aiGuideUtils.ts`、`media/tab-groups.skill.md`、`example/tab-groups.SKILL.md`、`version/skill/3/`、`version/explain.md`、`README.md`、`developer-readme.md`
 
+### 用户 README 双语重写（2026-09-16）
+
+| 项 | 决策 |
+|----|------|
+| 结构 | 同一 `README.md`：顶部短引 + 锚点切换；完整 **English** 与 **中文** 两节 |
+| 文风 | 强调「关标签≠丢文件 / 项目地图 vs 布局会话」；功能表写全（嵌套、标记、搜索、设置、Skill、限制、FAQ） |
+| Marketplace | `package.json` `description` 改为更贴卖点的一句英文 |
+
+**涉及文件**：`README.md`、`package.json`
+
