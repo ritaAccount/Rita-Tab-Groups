@@ -539,3 +539,14 @@ media/shortcuts.js        # 按键捕获逻辑
 
 **涉及文件**：`README.md`、`package.json`
 
+### Marketplace 扩展图标（2026-09-16）
+
+| 项 | 决策 |
+|----|------|
+| 文件 | `media/icon.png`（用户提供的 1024 JPG 转成 **256×256 PNG**） |
+| 声明 | `package.json` → `"icon": "media/icon.png"`；`galleryBanner` 深色 `#1a1d21` |
+| 发布 | 无需单独网页上传；`vsce publish` 打进 VSIX 后 Marketplace 自动显示 |
+| 注意 | 须 PNG（勿 SVG）；勿被 `.vscodeignore` 排除；活动栏 Codicon 与 Marketplace 图标无关 |
+
+**涉及文件**：`media/icon.png`、`package.json`
+
