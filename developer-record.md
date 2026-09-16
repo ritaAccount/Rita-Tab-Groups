@@ -500,3 +500,12 @@ media/shortcuts.js        # 按键捕获逻辑
 
 **涉及文件**：`.vscodeignore`
 
+### 发布：README 相对链接与 repository（2026-09-16）
+
+| 项 | 决策 |
+|----|------|
+| 原因 | `vsce publish` 因 README 中 `./developer-readme.md` 等相对链接且无法解析仓库而失败；这些开发文档也不进 VSIX |
+| 处理 | 用户 `README.md` 去掉「开发者文档」一节；`package.json` 增加 `repository.url`（GitHub HTTPS） |
+
+**涉及文件**：`README.md`、`package.json`
+
