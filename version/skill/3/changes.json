@@ -1,0 +1,14 @@
+{
+  "version": 3,
+  "kind": "skill",
+  "from": 2,
+  "summary": "扩展 Marketplace 标识改为 Rita.rita-tab-groups / 显示名 Rita Tab Groups",
+  "changes": [
+    "package name 改为 rita-tab-groups（扩展 ID：Rita.rita-tab-groups）",
+    "displayName / 活动栏 / 设置分类标题改为 Rita Tab Groups",
+    "Skill 文内扩展标识与显示名同步更新"
+  ],
+  "targets": [
+    ".cursor/skills/tab-groups/SKILL.md"
+  ]
+}

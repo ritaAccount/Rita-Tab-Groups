@@ -20,10 +20,14 @@ version/
     │   ├── example.json                 ← 元信息（format / targets / 文件索引）
     │   ├── example-tab-groups-ai.md     ← 当时完整手册
     │   └── example-tab-groups.cursor-rule.md
-    └── 2/
+    ├── 2/
+    │   ├── changes.json
+    │   ├── example.json                 ← 元信息（format / target / file）
+    │   └── example.SKILL.md             ← 当时完整 Skill 正文
+    └── 3/
         ├── changes.json
-        ├── example.json                 ← 元信息（format / target / file）
-        └── example.SKILL.md             ← 当时完整 Skill 正文
+        ├── example.json
+        └── example.SKILL.md             ← 扩展 ID 改为 Rita.rita-tab-groups
 ```
 
 | 线 | 版本号来源 | 文件夹 | 当前版本 |

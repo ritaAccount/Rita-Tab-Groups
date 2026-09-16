@@ -1,6 +1,6 @@
 {
-  "name": "tab-groups",
-  "displayName": "Tab Groups",
+  "name": "rita-tab-groups",
+  "displayName": "Rita Tab Groups",
   "description": "Organize open and unopened files in VS Code into logical groups",
   "version": "1.1.1",
   "publisher": "Rita",
@@ -21,7 +21,7 @@
   "main": "./out/extension.js",
   "contributes": {
     "configuration": {
-      "title": "Tab Groups",
+      "title": "Rita Tab Groups",
       "properties": {
         "tabGroups.shortcuts": {
           "type": "object",
@@ -162,7 +162,7 @@
       "activitybar": [
         {
           "id": "tab-groups",
-          "title": "Tab Groups",
+          "title": "Rita Tab Groups",
           "icon": "$(list-selection)"
         }
       ]

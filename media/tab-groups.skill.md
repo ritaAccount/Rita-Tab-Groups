@@ -1,18 +1,18 @@
 ---
 name: tab-groups
 description: >-
-  Manages Tab Groups (Rita.tab-groups) by editing workspace
+  Manages Rita Tab Groups (Rita.rita-tab-groups) by editing workspace
   .vscode/tab-groups.json and tabGroups.display / tabGroups.shortcuts.
   Use when the user asks in natural language to create, rename, delete, or nest
   file groups; add/remove files; add cursor/function/text markers; scan regex
   groups; or change Tab Groups display/shortcut settings.
 ---
 
-<!-- tab-groups-ai-guide-version: 2 -->
+<!-- tab-groups-ai-guide-version: 3 -->
 
-# Tab Groups — 项目 Skill
+# Rita Tab Groups — 项目 Skill
 
-本文件由扩展 **Tab Groups**（`Rita.tab-groups`）在**工作区初始化/激活**时写入到：
+本文件由扩展 **Rita Tab Groups**（`Rita.rita-tab-groups`）在**工作区初始化/激活**时写入到：
 
 `.cursor/skills/tab-groups/SKILL.md`
 

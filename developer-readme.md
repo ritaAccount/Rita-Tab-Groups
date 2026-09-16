@@ -2,8 +2,8 @@
 
 ## 1. 概述
 
-**插件名称**：Tab Groups  
-**扩展标识**：`Rita.tab-groups`（Publisher: `Rita`，package name: `tab-groups`）  
+**插件名称**：Rita Tab Groups  
+**扩展标识**：`Rita.rita-tab-groups`（Publisher: `Rita`，package name: `rita-tab-groups`）  
 **功能**：允许用户将 VSCode 中打开或未打开的文件组织成逻辑分组，支持手动添加和基于正则的自动扫描。分组配置可内嵌于分组，也可定义为全局配置供多个分组复用。v2 起支持可自定义快捷键（Webview 录入、工作区配置、同步至用户 keybindings）。
 
 **版本**：v1.0（MVP）+ v2（快捷键）

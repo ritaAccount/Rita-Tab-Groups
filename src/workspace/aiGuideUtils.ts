@@ -4,7 +4,7 @@ import { getWorkspaceFolder } from './workspaceUtils';
 /** 与 media/tab-groups.skill.md 顶部版本注释一致；升高后会覆盖工作区已写入的 Skill。
  * 升版时须新建 version/skill/<新版本>/（changes.json + 完整 example，见 version/explain.md）。
  */
-export const AI_GUIDE_VERSION = 2;
+export const AI_GUIDE_VERSION = 3;
 
 /** 工作区项目 Skill（Cursor Agent Skills） */
 export const AI_SKILL_RELATIVE_PATH = '.cursor/skills/tab-groups/SKILL.md';
@@ -23,7 +23,7 @@ export async function ensureWorkspaceAiGuide(): Promise<boolean> {
     return false;
   }
 
-  const extension = vscode.extensions.getExtension('Rita.tab-groups');
+  const extension = vscode.extensions.getExtension('Rita.rita-tab-groups');
   if (!extension) {
     return false;
   }

@@ -12,8 +12,8 @@
 | 项 | 决策 |
 |----|------|
 | 项目结构 | 代码直接放在仓库根目录，无子目录 |
-| 显示名称 | Tab Groups |
-| 扩展标识 | `Rita.tab-groups`（Publisher: Rita） |
+| 显示名称 | Rita Tab Groups |
+| 扩展标识 | `Rita.rita-tab-groups`（Publisher: Rita，package name: `rita-tab-groups`） |
 | 界面语言 | 中文 |
 | 交付范围 | 阶段 1–6（不含单元测试与 `vsce package` 打包） |
 | 活动栏图标 | `$(list-selection)` |
@@ -517,4 +517,15 @@ media/shortcuts.js        # 按键捕获逻辑
 | 版权 | Copyright (c) 2026 Rita（与 Marketplace 发布者一致） |
 
 **涉及文件**：`LICENSE`、`package.json`
+
+### Marketplace 改名：Rita Tab Groups（2026-09-16）
+
+| 项 | 决策 |
+|----|------|
+| 原因 | `name`/`displayName` 须全局唯一；`tab-groups` / 「Tab Groups」已被 `usama8800.tab-groups` 占用 |
+| name | `rita-tab-groups` → 扩展 ID `Rita.rita-tab-groups` |
+| displayName | `Rita Tab Groups`（活动栏 / 设置分类同名） |
+| Skill | `AI_GUIDE_VERSION` → `3`；新建 `version/skill/3/` |
+
+**涉及文件**：`package.json`、`package-lock.json`、`aiGuideUtils.ts`、`media/tab-groups.skill.md`、`example/tab-groups.SKILL.md`、`version/skill/3/`、`version/explain.md`、`README.md`、`developer-readme.md`
 
