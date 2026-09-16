@@ -489,3 +489,14 @@ media/shortcuts.js        # 按键捕获逻辑
 
 **涉及文件**：`package.json`、`src/tree/searchView.ts`、`src/tree/searchFilter.ts`、`src/tree/treeProvider.ts`、`src/settings/searchSettingsUtils.ts`、`src/extension.ts`、`src/data/types.ts`、`media/search.*`、`example/settings.json`、文档
 
+---
+
+### `.vscodeignore` 打包排除（2026-09-16）
+
+| 项 | 决策 |
+|----|------|
+| 保留 | `README.md`、`package.json`、编译产物 `out/**`、运行时 `media/**`（含 `tab-groups.skill.md`） |
+| 排除 | 源码与 TS 配置、`example/`、`version/`、开发文档（`developer-*`、`AGENTS.md`、`CLAUDE.md`）、`.cursor/`、`.git/`、`node_modules` 等 |
+
+**涉及文件**：`.vscodeignore`
+
