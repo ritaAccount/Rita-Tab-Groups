@@ -509,3 +509,12 @@ media/shortcuts.js        # 按键捕获逻辑
 
 **涉及文件**：`README.md`、`package.json`
 
+### MIT 许可证（2026-09-16）
+
+| 项 | 决策 |
+|----|------|
+| 许可 | MIT；根目录 `LICENSE`，`package.json` 字段 `"license": "MIT"` |
+| 版权 | Copyright (c) 2026 Rita（与 Marketplace 发布者一致） |
+
+**涉及文件**：`LICENSE`、`package.json`
+
