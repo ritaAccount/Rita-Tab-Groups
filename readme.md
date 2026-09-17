@@ -212,7 +212,7 @@ Validated on save; watch escaping (`.` → `\.`).
 ### Links
 
 - Marketplace ID: `Rita.rita-tab-groups`
-- Repository: [github.com/ritaAccount/vscode-Tab-Groups](https://github.com/ritaAccount/vscode-Tab-Groups)
+- Repository: [github.com/ritaAccount/Rita-Tab-Groups](https://github.com/ritaAccount/Rita-Tab-Groups)
 - Changelog: [CHANGELOG.md](./CHANGELOG.md)
 - Contributing: [CONTRIBUTING.md](./CONTRIBUTING.md)
 
@@ -416,6 +416,6 @@ Validated on save; watch escaping (`.` → `\.`).
 ### 链接
 
 - Marketplace：`Rita.rita-tab-groups`
-- 仓库：[github.com/ritaAccount/vscode-Tab-Groups](https://github.com/ritaAccount/vscode-Tab-Groups)
+- 仓库：[github.com/ritaAccount/Rita-Tab-Groups](https://github.com/ritaAccount/Rita-Tab-Groups)
 - 更新说明：[CHANGELOG.md](./CHANGELOG.md)
 - 参与开发：[CONTRIBUTING.md](./CONTRIBUTING.md)
