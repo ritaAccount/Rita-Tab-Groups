@@ -1,0 +1,11 @@
+{
+  "version": 4,
+  "kind": "skill",
+  "from": 3,
+  "summary": "支持多根工作区：每根各自 tab-groups.json",
+  "changes": [
+    "规则改为单根或多根均可；多根时每个根文件夹各自一份 .vscode/tab-groups.json，路径相对该根",
+    "executeCommand 前提改为至少一个工作区文件夹（不再要求仅单根）"
+  ],
+  "targets": [".cursor/skills/tab-groups/SKILL.md"]
+}

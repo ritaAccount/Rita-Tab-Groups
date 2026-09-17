@@ -1,0 +1,10 @@
+{
+  "version": 7,
+  "kind": "skill",
+  "from": 6,
+  "summary": "快捷键允许空字符串表示不绑定",
+  "changes": [
+    "tabGroups.shortcuts 某键写成 \"\" 表示不绑定，并解除扩展默认键"
+  ],
+  "targets": [".cursor/skills/tab-groups/SKILL.md"]
+}

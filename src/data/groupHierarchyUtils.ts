@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Group, GroupFileEntry } from './types';
 import { getGroupFilePaths } from './fileEntryUtils';
+import { normalizeGroupColor, normalizeGroupIcon } from './groupAppearanceUtils';
 
 export function buildGroupsMap(groups: Group[]): Map<string, Group> {
   return new Map(groups.map((group) => [group.id, group]));
@@ -118,6 +119,8 @@ export function removeGroupReferences(groups: Group[], groupIds: Set<string>): v
 }
 
 export function normalizeGroupHierarchy(raw: Partial<Group>): Group {
+  const color = normalizeGroupColor(raw.color);
+  const icon = normalizeGroupIcon(raw.icon);
   return {
     id: raw.id ?? randomUUID(),
     name: raw.name ?? '未命名分组',
@@ -128,6 +131,8 @@ export function normalizeGroupHierarchy(raw: Partial<Group>): Group {
     files: raw.files ?? [],
     config: raw.config,
     configId: raw.configId,
+    ...(color ? { color } : {}),
+    ...(icon ? { icon } : {}),
   };
 }
 

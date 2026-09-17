@@ -5,8 +5,8 @@ import {
   getDisplaySettings,
   saveDisplaySettings,
 } from './displaySettingsUtils';
-import { AI_SKILL_RELATIVE_PATH, ensureWorkspaceAiGuide } from '../workspace/aiGuideUtils';
-import { TabGroupsManager } from '../data/tabGroupsManager';
+import { AI_SKILL_RELATIVE_PATH, ensureWorkspaceAiGuides } from '../workspace/aiGuideUtils';
+import { TabGroupsWorkspace } from '../data/tabGroupsWorkspace';
 import {
   CONFIG_RELATIVE_PATH,
   DEFAULT_DISPLAY_SETTINGS,
@@ -16,11 +16,15 @@ import {
 } from '../data/types';
 import { ensureWorkspaceShortcutSettings, getShortcuts, saveShortcuts } from './shortcutUtils';
 import { applyMarkerJumpHintVisibility } from '../tree/fileLocationUtils';
-import { getWorkspaceFolder, getWorkspaceInvalidMessage, isValidWorkspace } from '../workspace/workspaceUtils';
+import {
+  getWorkspaceInvalidMessage,
+  isValidWorkspace,
+  pickWorkspaceFolder,
+} from '../workspace/workspaceUtils';
 import { runExportTabGroups, runImportTabGroups } from './importExportCommands';
 
 let panel: vscode.WebviewPanel | undefined;
-let settingsManager: TabGroupsManager | undefined;
+let settingsWorkspace: TabGroupsWorkspace | undefined;
 let onConfigUpgraded: (() => void) | undefined;
 let onDisplaySettingsChanged: (() => void) | undefined;
 let onImportExportDone: (() => void) | undefined;
@@ -28,14 +32,14 @@ let extensionVersion = 'unknown';
 
 export function registerSettingsCommands(
   context: vscode.ExtensionContext,
-  manager: TabGroupsManager,
+  workspace: TabGroupsWorkspace,
   options?: {
     onConfigUpgraded?: () => void;
     onDisplaySettingsChanged?: () => void;
     onImportExportDone?: () => void;
   },
 ): void {
-  settingsManager = manager;
+  settingsWorkspace = workspace;
   onConfigUpgraded = options?.onConfigUpgraded;
   onDisplaySettingsChanged = options?.onDisplaySettingsChanged;
   onImportExportDone = options?.onImportExportDone;
@@ -47,19 +51,33 @@ export function registerSettingsCommands(
       openSettingsWebview(context);
     }),
     vscode.commands.registerCommand('tabGroups.exportConfig', async () => {
-      if (!settingsManager) {
+      if (!settingsWorkspace) {
         return;
       }
-      const ok = await runExportTabGroups(settingsManager);
+      const manager = await settingsWorkspace.resolveTargetManager(
+        undefined,
+        '选择要导出配置的工作区文件夹',
+      );
+      if (!manager) {
+        return;
+      }
+      const ok = await runExportTabGroups(manager);
       if (ok) {
         onImportExportDone?.();
       }
     }),
     vscode.commands.registerCommand('tabGroups.importConfig', async () => {
-      if (!settingsManager) {
+      if (!settingsWorkspace) {
         return;
       }
-      const ok = await runImportTabGroups(settingsManager);
+      const manager = await settingsWorkspace.resolveTargetManager(
+        undefined,
+        '选择要导入配置的工作区文件夹',
+      );
+      if (!manager) {
+        return;
+      }
+      const ok = await runImportTabGroups(manager);
       if (ok) {
         onImportExportDone?.();
       }
@@ -134,10 +152,17 @@ function openSettingsWebview(context: vscode.ExtensionContext): void {
     }
 
     if (message.type === 'exportConfig') {
-      if (!settingsManager) {
+      if (!settingsWorkspace) {
         return;
       }
-      const ok = await runExportTabGroups(settingsManager);
+      const manager = await settingsWorkspace.resolveTargetManager(
+        undefined,
+        '选择要导出配置的工作区文件夹',
+      );
+      if (!manager) {
+        return;
+      }
+      const ok = await runExportTabGroups(manager);
       if (ok) {
         onImportExportDone?.();
         panel!.webview.postMessage({ type: 'generalStatus', text: '已导出配置文件。' });
@@ -148,10 +173,17 @@ function openSettingsWebview(context: vscode.ExtensionContext): void {
     }
 
     if (message.type === 'importConfig') {
-      if (!settingsManager) {
+      if (!settingsWorkspace) {
         return;
       }
-      const ok = await runImportTabGroups(settingsManager);
+      const manager = await settingsWorkspace.resolveTargetManager(
+        undefined,
+        '选择要导入配置的工作区文件夹',
+      );
+      if (!manager) {
+        return;
+      }
+      const ok = await runImportTabGroups(manager);
       if (ok) {
         onImportExportDone?.();
         postVersionInfo(panel!);
@@ -173,12 +205,21 @@ function openSettingsWebview(context: vscode.ExtensionContext): void {
 }
 
 function postVersionInfo(webviewPanel: vscode.WebviewPanel): void {
+  const managers = settingsWorkspace?.getManagers() ?? [];
+  const versions = managers.map((m) => m.getConfigVersion());
+  const needsUpgrade = managers.some((m) => m.needsConfigUpgrade());
+  const configVersion =
+    versions.length === 0
+      ? '（无）'
+      : versions.length === 1
+        ? versions[0]
+        : versions.join(' / ');
   webviewPanel.webview.postMessage({
     type: 'versionInfo',
     extensionVersion,
-    configVersion: settingsManager?.getConfigVersion() ?? '（无）',
+    configVersion,
     schemaVersion: CONFIG_VERSION,
-    needsUpgrade: settingsManager?.needsConfigUpgrade() ?? false,
+    needsUpgrade,
   });
 }
 
@@ -197,7 +238,7 @@ async function handleSaveDisplay(
   if (!isValidWorkspace()) {
     webviewPanel.webview.postMessage({
       type: 'displayStatus',
-      text: getWorkspaceInvalidMessage() || '请先打开单根工作区后再保存。',
+      text: getWorkspaceInvalidMessage() || '请先打开工作区文件夹后再保存。',
     });
     return;
   }
@@ -223,12 +264,12 @@ async function handleUpgradeConfig(webviewPanel: vscode.WebviewPanel): Promise<v
   if (!isValidWorkspace()) {
     webviewPanel.webview.postMessage({
       type: 'generalStatus',
-      text: getWorkspaceInvalidMessage() || '请先打开单根工作区。',
+      text: getWorkspaceInvalidMessage() || '请先打开工作区文件夹。',
     });
     return;
   }
 
-  if (!settingsManager) {
+  if (!settingsWorkspace) {
     webviewPanel.webview.postMessage({
       type: 'generalStatus',
       text: '内部错误：配置管理器未初始化。',
@@ -236,7 +277,16 @@ async function handleUpgradeConfig(webviewPanel: vscode.WebviewPanel): Promise<v
     return;
   }
 
-  if (!settingsManager.needsConfigUpgrade()) {
+  const managers = settingsWorkspace.getManagers();
+  if (managers.length === 0) {
+    webviewPanel.webview.postMessage({
+      type: 'generalStatus',
+      text: '当前没有可用的工作区文件夹。',
+    });
+    return;
+  }
+
+  if (!managers.some((m) => m.needsConfigUpgrade())) {
     webviewPanel.webview.postMessage({
       type: 'generalStatus',
       text: `配置已是最新（schema ${CONFIG_VERSION}），无需更新。`,
@@ -246,16 +296,28 @@ async function handleUpgradeConfig(webviewPanel: vscode.WebviewPanel): Promise<v
   }
 
   try {
-    const result = await settingsManager.upgradeConfigIfNeeded();
+    const upgraded: string[] = [];
+    for (const manager of managers) {
+      if (!manager.needsConfigUpgrade()) {
+        continue;
+      }
+      const result = await manager.upgradeConfigIfNeeded();
+      if (result.upgraded) {
+        upgraded.push(
+          `${manager.folder.name}: ${result.from ?? '未知'} → ${result.to}`,
+        );
+      }
+    }
     await ensureWorkspaceShortcutSettings();
     await ensureWorkspaceDisplaySettings();
     onConfigUpgraded?.();
     postVersionInfo(webviewPanel);
     webviewPanel.webview.postMessage({
       type: 'generalStatus',
-      text: result.upgraded
-        ? `配置已从 ${result.from ?? '未知'} 升级到 ${result.to}。`
-        : `配置已是最新（schema ${CONFIG_VERSION}）。`,
+      text:
+        upgraded.length > 0
+          ? `已升级：${upgraded.join('；')}`
+          : `配置已是最新（schema ${CONFIG_VERSION}）。`,
     });
     vscode.window.setStatusBarMessage('Tab Groups 配置已检查/升级', 3000);
   } catch (error) {
@@ -273,12 +335,12 @@ async function openTabGroupsJson(
   if (!isValidWorkspace()) {
     webviewPanel.webview.postMessage({
       type: 'generalStatus',
-      text: getWorkspaceInvalidMessage() || '请先打开单根工作区。',
+      text: getWorkspaceInvalidMessage() || '请先打开工作区文件夹。',
     });
     return;
   }
 
-  const folder = getWorkspaceFolder();
+  const folder = await pickWorkspaceFolder('选择要打开配置的工作区文件夹');
   if (!folder) {
     return;
   }
@@ -322,7 +384,7 @@ async function handleSave(
   if (!isValidWorkspace()) {
     webviewPanel.webview.postMessage({
       type: 'error',
-      text: getWorkspaceInvalidMessage() || '请先打开单根工作区后再保存。',
+      text: getWorkspaceInvalidMessage() || '请先打开工作区文件夹后再保存。',
     });
     return;
   }
@@ -506,7 +568,7 @@ function getWebviewHtml(webview: vscode.Webview, extensionUri: vscode.Uri): stri
       <section class="settings-pane" data-pane="shortcuts" id="pane-shortcuts">
         <div class="pane-inner">
           <h1>快捷键</h1>
-          <p class="hint">点击右侧框后按下组合键录入。保存后写入工作区 settings，并同步到 keybindings。</p>
+          <p class="hint">点击右侧框后按下组合键录入；Backspace / Delete 清除（不绑定）。保存后写入工作区 settings，并同步到 keybindings。</p>
 
           <div class="setting-item">
             <div class="setting-text">
@@ -562,6 +624,20 @@ function getWebviewHtml(webview: vscode.Webview, extensionUri: vscode.Uri): stri
             </div>
             <button id="nextCursor" class="shortcut-button" type="button" data-shortcut="nextCursor">ctrl+shift+]</button>
           </div>
+          <div class="setting-item">
+            <div class="setting-text">
+              <div class="setting-title">设置分组颜色</div>
+              <div class="setting-desc">需先在侧边栏选中分组</div>
+            </div>
+            <button id="setGroupColor" class="shortcut-button" type="button" data-shortcut="setGroupColor">ctrl+alt+c</button>
+          </div>
+          <div class="setting-item">
+            <div class="setting-text">
+              <div class="setting-title">设置分组图标</div>
+              <div class="setting-desc">需先在侧边栏选中分组</div>
+            </div>
+            <button id="setGroupIcon" class="shortcut-button" type="button" data-shortcut="setGroupIcon">ctrl+alt+i</button>
+          </div>
 
           <div id="status" class="status"></div>
 
@@ -571,7 +647,7 @@ function getWebviewHtml(webview: vscode.Webview, extensionUri: vscode.Uri): stri
           </div>
 
           <div class="warning">
-            保存需要已打开单根工作区。快捷键会写入用户 keybindings.json；若文件中已有注释，同步时可能被移除。
+            保存需要已打开工作区文件夹。快捷键会写入用户 keybindings.json；若文件中已有注释，同步时可能被移除。
           </div>
         </div>
       </section>
@@ -587,7 +663,7 @@ function getWebviewHtml(webview: vscode.Webview, extensionUri: vscode.Uri): stri
 export async function initializeShortcutSettings(): Promise<void> {
   await ensureWorkspaceShortcutSettings();
   await ensureWorkspaceDisplaySettings();
-  const wroteAiSkill = await ensureWorkspaceAiGuide();
+  const wroteAiSkill = await ensureWorkspaceAiGuides();
   if (wroteAiSkill) {
     vscode.window.setStatusBarMessage(
       `Tab Groups: 已写入 AI Skill（${AI_SKILL_RELATIVE_PATH}），可直接让 AI 代操作分组`,

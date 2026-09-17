@@ -3,27 +3,33 @@ import { registerCommands } from './tree/commands';
 import { fileExistenceCache } from './workspace/fileExistenceCache';
 import { ensureWorkspaceShortcutSettings, syncKeybindingsFromSettings } from './settings/shortcutUtils';
 import { initializeShortcutSettings, registerSettingsCommands } from './settings/settingsWebview';
-import { TabGroupsManager } from './data/tabGroupsManager';
+import { TabGroupsWorkspace } from './data/tabGroupsWorkspace';
 import { TabGroupsTreeProvider } from './tree/treeProvider';
 import { registerSearchView } from './tree/searchView';
 import { CONFIG_RELATIVE_PATH } from './data/types';
 import { registerMarkerJumpHint } from './tree/fileLocationUtils';
-import { isValidWorkspace, toRelativePath } from './workspace/workspaceUtils';
+import {
+  getWorkspaceFolders,
+  isValidWorkspace,
+  resolveWorkspaceFolder,
+  toRelativePath,
+} from './workspace/workspaceUtils';
+import { ensureWorkspaceAiGuides } from './workspace/aiGuideUtils';
 
-let manager: TabGroupsManager | undefined;
+let workspace: TabGroupsWorkspace | undefined;
 let treeProvider: TabGroupsTreeProvider | undefined;
-let configWatcher: vscode.FileSystemWatcher | undefined;
-let workspaceFileWatcher: vscode.FileSystemWatcher | undefined;
+let configWatchers: vscode.FileSystemWatcher[] = [];
+let workspaceFileWatchers: vscode.FileSystemWatcher[] = [];
 let isReloadingFromDisk = false;
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
-  manager = new TabGroupsManager();
-  treeProvider = new TabGroupsTreeProvider(manager);
+  workspace = new TabGroupsWorkspace();
+  treeProvider = new TabGroupsTreeProvider(workspace);
   const sidebar = registerSearchView(context, treeProvider);
 
   registerMarkerJumpHint(context);
-  registerCommands(context, manager, treeProvider, sidebar);
-  registerSettingsCommands(context, manager, {
+  registerCommands(context, workspace, treeProvider, sidebar);
+  registerSettingsCommands(context, workspace, {
     onConfigUpgraded: () => {
       treeProvider?.refresh();
     },
@@ -36,7 +42,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   });
 
   context.subscriptions.push(
-    manager.onDidChange(() => {
+    workspace.onDidChange(() => {
       if (!isReloadingFromDisk) {
         treeProvider?.refresh();
       }
@@ -49,9 +55,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }),
     vscode.workspace.onDidSaveTextDocument(async (doc) => {
       if (isConfigFile(doc.uri)) {
-        await reloadFromDisk();
+        await reloadFromDisk(doc.uri);
       }
     }),
+    {
+      dispose: () => {
+        workspace?.dispose();
+      },
+    },
   );
 
   await reloadAll(context);
@@ -65,125 +76,168 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 }
 
 export function deactivate(): void {
-  configWatcher?.dispose();
-  configWatcher = undefined;
-  workspaceFileWatcher?.dispose();
-  workspaceFileWatcher = undefined;
+  disposeWatchers(configWatchers);
+  configWatchers = [];
+  disposeWatchers(workspaceFileWatchers);
+  workspaceFileWatchers = [];
   fileExistenceCache.clear();
-  manager = undefined;
+  workspace?.dispose();
+  workspace = undefined;
   treeProvider = undefined;
 }
 
 async function reloadAll(context: vscode.ExtensionContext): Promise<void> {
-  setupConfigWatcher(context);
-  setupWorkspaceFileWatcher(context);
+  setupConfigWatchers(context);
+  setupWorkspaceFileWatchers(context);
 
-  if (!isValidWorkspace()) {
+  if (!isValidWorkspace() || !workspace) {
     fileExistenceCache.clear();
     treeProvider?.refresh();
     return;
   }
 
-  await reloadFromDisk();
-}
-
-async function reloadFromDisk(): Promise<void> {
-  if (!manager) {
-    return;
-  }
-
   isReloadingFromDisk = true;
   try {
-    await manager.load();
+    await workspace.loadAll();
+    await ensureWorkspaceAiGuides();
     treeProvider?.refresh();
   } finally {
     isReloadingFromDisk = false;
   }
 }
 
-function setupConfigWatcher(context: vscode.ExtensionContext): void {
-  configWatcher?.dispose();
-  configWatcher = undefined;
-
-  if (!isValidWorkspace()) {
+async function reloadFromDisk(configUri?: vscode.Uri): Promise<void> {
+  if (!workspace) {
     return;
   }
 
-  const pattern = new vscode.RelativePattern(vscode.workspace.workspaceFolders![0], CONFIG_RELATIVE_PATH);
-  configWatcher = vscode.workspace.createFileSystemWatcher(pattern);
-
-  const handleExternalChange = async () => {
-    await reloadFromDisk();
-    vscode.window.setStatusBarMessage('标签分组配置已重新加载', 3000);
-  };
-
-  configWatcher.onDidChange(handleExternalChange);
-  configWatcher.onDidCreate(handleExternalChange);
-  configWatcher.onDidDelete(async () => {
-    if (manager) {
-      await manager.load();
-      treeProvider?.refresh();
-      vscode.window.setStatusBarMessage('标签分组配置文件已删除，已恢复默认结构', 3000);
+  isReloadingFromDisk = true;
+  try {
+    if (configUri) {
+      const folder = resolveWorkspaceFolder(configUri);
+      if (folder) {
+        await workspace.reloadFolder(folder);
+      } else {
+        await workspace.loadAll();
+      }
+    } else {
+      await workspace.loadAll();
     }
-  });
-
-  context.subscriptions.push(configWatcher);
+    treeProvider?.refresh();
+  } finally {
+    isReloadingFromDisk = false;
+  }
 }
 
-function setupWorkspaceFileWatcher(context: vscode.ExtensionContext): void {
-  workspaceFileWatcher?.dispose();
-  workspaceFileWatcher = undefined;
+function setupConfigWatchers(context: vscode.ExtensionContext): void {
+  disposeWatchers(configWatchers);
+  configWatchers = [];
 
   if (!isValidWorkspace()) {
     return;
   }
 
-  const pattern = new vscode.RelativePattern(vscode.workspace.workspaceFolders![0], '**/*');
-  workspaceFileWatcher = vscode.workspace.createFileSystemWatcher(pattern);
+  for (const folder of getWorkspaceFolders()) {
+    const pattern = new vscode.RelativePattern(folder, CONFIG_RELATIVE_PATH);
+    const watcher = vscode.workspace.createFileSystemWatcher(pattern);
 
-  const handlePathsChanged = (paths: string[]): void => {
-    if (paths.length === 0 || !manager || !treeProvider) {
-      return;
-    }
+    const handleExternalChange = async () => {
+      await reloadFromDisk(vscode.Uri.joinPath(folder.uri, CONFIG_RELATIVE_PATH));
+      vscode.window.setStatusBarMessage('标签分组配置已重新加载', 3000);
+    };
 
-    fileExistenceCache.invalidateMany(paths);
-    const affectsGroups = paths.some((path) => manager!.containsFilePath(path));
-    if (affectsGroups) {
-      treeProvider.refresh();
-    }
-  };
+    watcher.onDidChange(handleExternalChange);
+    watcher.onDidCreate(handleExternalChange);
+    watcher.onDidDelete(async () => {
+      await workspace?.reloadFolder(folder);
+      treeProvider?.refresh();
+      vscode.window.setStatusBarMessage('标签分组配置文件已删除，已恢复默认结构', 3000);
+    });
 
-  workspaceFileWatcher.onDidCreate((uri) => {
-    const path = toRelativePath(uri);
-    if (path) {
-      handlePathsChanged([path]);
-    }
-  });
+    configWatchers.push(watcher);
+    context.subscriptions.push(watcher);
+  }
+}
 
-  workspaceFileWatcher.onDidDelete((uri) => {
-    const path = toRelativePath(uri);
-    if (path) {
-      handlePathsChanged([path]);
-    }
-  });
+function setupWorkspaceFileWatchers(context: vscode.ExtensionContext): void {
+  disposeWatchers(workspaceFileWatchers);
+  workspaceFileWatchers = [];
+
+  if (!isValidWorkspace()) {
+    return;
+  }
+
+  for (const folder of getWorkspaceFolders()) {
+    const pattern = new vscode.RelativePattern(folder, '**/*');
+    const watcher = vscode.workspace.createFileSystemWatcher(pattern);
+
+    const handlePathsChanged = (relativePaths: string[]): void => {
+      if (relativePaths.length === 0 || !workspace || !treeProvider) {
+        return;
+      }
+
+      fileExistenceCache.invalidateMany(
+        relativePaths.map((relativePath) => ({ folder, relativePath })),
+      );
+      const affectsGroups = relativePaths.some((path) =>
+        workspace!.containsFilePath(folder, path),
+      );
+      if (affectsGroups) {
+        treeProvider.refresh();
+      }
+    };
+
+    watcher.onDidCreate((uri) => {
+      const path = toRelativePath(uri, folder);
+      if (path) {
+        handlePathsChanged([path]);
+      }
+    });
+
+    watcher.onDidDelete((uri) => {
+      const path = toRelativePath(uri, folder);
+      if (path) {
+        handlePathsChanged([path]);
+      }
+    });
+
+    workspaceFileWatchers.push(watcher);
+    context.subscriptions.push(watcher);
+  }
 
   context.subscriptions.push(
-    workspaceFileWatcher,
     vscode.workspace.onDidRenameFiles((event) => {
-      const paths: string[] = [];
+      const byFolder = new Map<string, { folder: vscode.WorkspaceFolder; paths: string[] }>();
       for (const { oldUri, newUri } of event.files) {
-        const oldPath = toRelativePath(oldUri);
-        const newPath = toRelativePath(newUri);
-        if (oldPath) {
-          paths.push(oldPath);
-        }
-        if (newPath) {
-          paths.push(newPath);
+        for (const uri of [oldUri, newUri]) {
+          const folder = resolveWorkspaceFolder(uri);
+          const path = folder ? toRelativePath(uri, folder) : undefined;
+          if (!folder || !path) {
+            continue;
+          }
+          const key = folder.uri.toString();
+          let bucket = byFolder.get(key);
+          if (!bucket) {
+            bucket = { folder, paths: [] };
+            byFolder.set(key, bucket);
+          }
+          bucket.paths.push(path);
         }
       }
-      handlePathsChanged(paths);
+      for (const { folder, paths } of byFolder.values()) {
+        fileExistenceCache.invalidateMany(paths.map((relativePath) => ({ folder, relativePath })));
+        if (paths.some((path) => workspace?.containsFilePath(folder, path))) {
+          treeProvider?.refresh();
+        }
+      }
     }),
   );
+}
+
+function disposeWatchers(watchers: vscode.FileSystemWatcher[]): void {
+  for (const watcher of watchers) {
+    watcher.dispose();
+  }
 }
 
 function isConfigFile(uri: vscode.Uri): boolean {

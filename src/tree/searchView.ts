@@ -13,7 +13,7 @@ import {
   iconThemeResourceRoots,
   loadWorkbenchIconTheme,
 } from './fileIconTheme';
-import { getWorkspaceFolder, getWorkspaceInvalidMessage, isValidWorkspace, toRelativePath } from '../workspace/workspaceUtils';
+import { getWorkspaceInvalidMessage, isValidWorkspace, pickWorkspaceFolder, toRelativePath } from '../workspace/workspaceUtils';
 
 const HISTORY_KEY = 'tabGroups.searchHistory';
 const QUERY_KEY = 'tabGroups.searchQuery';
@@ -205,9 +205,8 @@ export class TabGroupsSearchViewProvider implements vscode.WebviewViewProvider {
   }
 
   private async pickFolder(field: 'include' | 'exclude'): Promise<void> {
-    const folder = getWorkspaceFolder();
+    const folder = await pickWorkspaceFolder('选择要浏览的工作区文件夹');
     if (!folder) {
-      void vscode.window.showWarningMessage('请先打开一个工作区文件夹。');
       return;
     }
 
@@ -228,9 +227,9 @@ export class TabGroupsSearchViewProvider implements vscode.WebviewViewProvider {
       if (uri.fsPath === folder.uri.fsPath) {
         continue;
       }
-      const relative = toRelativePath(uri);
+      const relative = toRelativePath(uri, folder);
       if (!relative) {
-        void vscode.window.showWarningMessage(`文件夹不在当前工作区内：${uri.fsPath}`);
+        void vscode.window.showWarningMessage(`文件夹不在所选工作区根内：${uri.fsPath}`);
         continue;
       }
       const normalized = normalizeFolderPattern(relative);

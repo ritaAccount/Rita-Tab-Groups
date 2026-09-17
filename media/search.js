@@ -268,7 +268,10 @@
       return `<span class="tree-file-icon tree-file-icon-font" style="font-family:'${family}';${size}${color}">${escapeHtml(icon.character)}</span>`;
     }
     const id = (icon && icon.id) || node.iconId || 'file';
-    return `<span class="codicon codicon-${escapeHtml(id)}" aria-hidden="true"></span>`;
+    const color = icon && icon.kind === 'codicon' && icon.color
+      ? ` style="color:${escapeHtml(icon.color)}"`
+      : '';
+    return `<span class="codicon codicon-${escapeHtml(id)}"${color} aria-hidden="true"></span>`;
   }
 
   function renderNode(node, depth) {
@@ -281,7 +284,9 @@
     const plus =
       node.kind === 'group'
         ? `<button type="button" class="tree-plus" data-action="add-child" title="新建子分组"><span class="codicon codicon-add" aria-hidden="true"></span></button>`
-        : '';
+        : node.kind === 'workspaceFolder'
+          ? `<button type="button" class="tree-plus" data-action="add-child" title="新建分组"><span class="codicon codicon-add" aria-hidden="true"></span></button>`
+          : '';
     const desc = node.description
       ? `<span class="tree-desc">${escapeHtml(node.description)}</span>`
       : '';
@@ -329,7 +334,11 @@
       event.stopPropagation();
       const row = plus.closest('.tree-row');
       if (row && row.dataset.id) {
-        post({ type: 'run', id: row.dataset.id, command: 'tabGroups.createSubGroup' });
+        const command =
+          row.dataset.kind === 'workspaceFolder'
+            ? 'tabGroups.createGroup'
+            : 'tabGroups.createSubGroup';
+        post({ type: 'run', id: row.dataset.id, command });
       }
       return;
     }

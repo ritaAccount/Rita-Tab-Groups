@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import * as vscode from 'vscode';
 import { getCurrentGitBranch } from '../workspace/gitBranchUtils';
-import { getWorkspaceFolder } from '../workspace/workspaceUtils';
 import {
   buildScannedFiles,
   CONFIG_VERSION,
@@ -12,6 +11,7 @@ import {
   normalizeBranchName,
   normalizeGroupFiles,
 } from './fileEntryUtils';
+import { normalizeGroupColor, normalizeGroupIcon } from './groupAppearanceUtils';
 import {
   collectAllFilePaths,
   collectAllFileEntries,
@@ -52,20 +52,14 @@ export class TabGroupsManager {
   private readonly onDidChangeEmitter = new vscode.EventEmitter<void>();
   readonly onDidChange = this.onDidChangeEmitter.event;
 
-  private getConfigUri(): vscode.Uri | undefined {
-    const folder = getWorkspaceFolder();
-    if (!folder) {
-      return undefined;
-    }
-    return vscode.Uri.joinPath(folder.uri, CONFIG_RELATIVE_PATH);
+  constructor(readonly folder: vscode.WorkspaceFolder) {}
+
+  private getConfigUri(): vscode.Uri {
+    return vscode.Uri.joinPath(this.folder.uri, CONFIG_RELATIVE_PATH);
   }
 
   async load(): Promise<void> {
     const uri = this.getConfigUri();
-    if (!uri) {
-      this.data = { version: CONFIG_VERSION, groups: [], configs: [] };
-      return;
-    }
 
     try {
       const content = await vscode.workspace.fs.readFile(uri);
@@ -111,10 +105,6 @@ export class TabGroupsManager {
 
   async save(): Promise<void> {
     const uri = this.getConfigUri();
-    if (!uri) {
-      return;
-    }
-
     const dirUri = vscode.Uri.joinPath(uri, '..');
     try {
       await vscode.workspace.fs.createDirectory(dirUri);
@@ -241,6 +231,42 @@ export class TabGroupsManager {
     await this.save();
   }
 
+  async setGroupColor(id: string, color: string | undefined): Promise<boolean> {
+    const group = this.getGroup(id);
+    if (!group) {
+      return false;
+    }
+    if (color === undefined) {
+      delete group.color;
+    } else {
+      const normalized = normalizeGroupColor(color);
+      if (!normalized) {
+        return false;
+      }
+      group.color = normalized;
+    }
+    await this.save();
+    return true;
+  }
+
+  async setGroupIcon(id: string, icon: string | undefined): Promise<boolean> {
+    const group = this.getGroup(id);
+    if (!group) {
+      return false;
+    }
+    if (icon === undefined) {
+      delete group.icon;
+    } else {
+      const normalized = normalizeGroupIcon(icon);
+      if (!normalized) {
+        return false;
+      }
+      group.icon = normalized;
+    }
+    await this.save();
+    return true;
+  }
+
   async addFileToGroup(groupId: string, filePath: string): Promise<boolean> {
     const result = await this.addFilesToGroup(groupId, [filePath]);
     return result.added > 0;
@@ -256,7 +282,7 @@ export class TabGroupsManager {
       return { added: 0, skipped: filePaths.length };
     }
 
-    const branch = await getCurrentGitBranch();
+    const branch = await getCurrentGitBranch(this.folder);
     let added = 0;
     let skipped = 0;
 
@@ -480,7 +506,7 @@ export class TabGroupsManager {
       next.query = marker.query?.trim() || label;
     }
 
-    const branch = normalizeBranchName(marker.branch) ?? (await getCurrentGitBranch());
+    const branch = normalizeBranchName(marker.branch) ?? (await getCurrentGitBranch(this.folder));
     if (branch) {
       next.branch = branch;
     }
@@ -642,17 +668,13 @@ export class TabGroupsManager {
     if (!group) {
       return;
     }
-    const branch = await getCurrentGitBranch();
+    const branch = await getCurrentGitBranch(this.folder);
     group.files = buildScannedFiles(group.files, matchedPaths, branch);
     await this.save();
   }
 
-  getConfigFileUri(): vscode.Uri | undefined {
-    const folder = getWorkspaceFolder();
-    if (!folder) {
-      return undefined;
-    }
-    return vscode.Uri.joinPath(folder.uri, CONFIG_RELATIVE_PATH);
+  getConfigFileUri(): vscode.Uri {
+    return this.getConfigUri();
   }
 
   getGroupLabelSuffix(group: Group): string {

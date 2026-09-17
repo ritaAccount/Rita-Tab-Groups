@@ -8,7 +8,7 @@ description: >-
   groups; or change Tab Groups display/shortcut settings.
 ---
 
-<!-- tab-groups-ai-guide-version: 7 -->
+<!-- tab-groups-ai-guide-version: 5 -->
 
 # Rita Tab Groups — 项目 Skill
 
@@ -207,9 +207,7 @@ description: >-
     "addFunction": "ctrl+shift+;",
     "addText": "ctrl+shift+'",
     "prevCursor": "ctrl+shift+[",
-    "nextCursor": "ctrl+shift+]",
-    "setGroupColor": "ctrl+alt+c",
-    "setGroupIcon": "ctrl+alt+i"
+    "nextCursor": "ctrl+shift+]"
   }
 }
 ```
@@ -220,7 +218,7 @@ description: >-
 | `hover` | 仅悬停显示 |
 | `both` | 名称后与悬停都显示 |
 
-快捷键写入 settings 后，用户若要立刻全局生效，可能还需在扩展设置页保存一次以同步本机 `keybindings.json`；改 settings 本身即可完成配置层面修改。某键写成 `""` 表示**不绑定**（并解除扩展默认键）。
+快捷键写入 settings 后，用户若要立刻全局生效，可能还需在扩展设置页保存一次以同步本机 `keybindings.json`；改 settings 本身即可完成配置层面修改。
 
 ---
 

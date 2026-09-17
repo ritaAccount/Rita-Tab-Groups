@@ -41,7 +41,9 @@
             "addFunction": "ctrl+shift+;",
             "addText": "ctrl+shift+'",
             "prevCursor": "ctrl+shift+[",
-            "nextCursor": "ctrl+shift+]"
+            "nextCursor": "ctrl+shift+]",
+            "setGroupColor": "ctrl+alt+c",
+            "setGroupIcon": "ctrl+alt+i"
           },
           "properties": {
             "addToGroup": {
@@ -79,6 +81,14 @@
             "deleteGroup": {
               "type": "string",
               "description": "「删除分组」快捷键"
+            },
+            "setGroupColor": {
+              "type": "string",
+              "description": "「设置分组颜色」快捷键（需先在侧边栏选中分组）"
+            },
+            "setGroupIcon": {
+              "type": "string",
+              "description": "「设置分组图标」快捷键（需先在侧边栏选中分组）"
             }
           }
         },
@@ -208,6 +218,14 @@
         "title": "重命名分组"
       },
       {
+        "command": "tabGroups.setGroupColor",
+        "title": "设置分组颜色"
+      },
+      {
+        "command": "tabGroups.setGroupIcon",
+        "title": "设置分组图标"
+      },
+      {
         "command": "tabGroups.createSubGroup",
         "title": "新建子分组",
         "icon": "$(add)"
@@ -334,54 +352,64 @@
       {
         "command": "tabGroups.addToGroup",
         "key": "ctrl+shift+i",
-        "when": "workspaceFolderCount == 1 && resourceScheme == file"
+        "when": "workspaceFolderCount >= 1 && resourceScheme == file"
       },
       {
         "command": "tabGroups.removeFromGroup",
         "key": "ctrl+shift+o",
-        "when": "workspaceFolderCount == 1 && resourceScheme == file"
+        "when": "workspaceFolderCount >= 1 && resourceScheme == file"
       },
       {
         "command": "tabGroups.createGroup",
         "key": "ctrl+shift+u",
-        "when": "workspaceFolderCount == 1"
+        "when": "workspaceFolderCount >= 1"
       },
       {
         "command": "tabGroups.deleteGroup",
         "key": "ctrl+shift+p",
-        "when": "workspaceFolderCount == 1"
+        "when": "workspaceFolderCount >= 1"
       },
       {
         "command": "tabGroups.addCursor",
         "key": "ctrl+shift+l",
-        "when": "workspaceFolderCount == 1 && resourceScheme == file && editorTextFocus"
+        "when": "workspaceFolderCount >= 1 && resourceScheme == file && editorTextFocus"
       },
       {
         "command": "tabGroups.addFunction",
         "key": "ctrl+shift+;",
-        "when": "workspaceFolderCount == 1 && resourceScheme == file && editorTextFocus"
+        "when": "workspaceFolderCount >= 1 && resourceScheme == file && editorTextFocus"
       },
       {
         "command": "tabGroups.addText",
         "key": "ctrl+shift+'",
-        "when": "workspaceFolderCount == 1 && resourceScheme == file && editorTextFocus"
+        "when": "workspaceFolderCount >= 1 && resourceScheme == file && editorTextFocus"
       },
       {
         "command": "tabGroups.prevCursor",
         "key": "ctrl+shift+[",
-        "when": "workspaceFolderCount == 1 && resourceScheme == file && editorTextFocus"
+        "when": "workspaceFolderCount >= 1 && resourceScheme == file && editorTextFocus"
       },
       {
         "command": "tabGroups.nextCursor",
         "key": "ctrl+shift+]",
-        "when": "workspaceFolderCount == 1 && resourceScheme == file && editorTextFocus"
+        "when": "workspaceFolderCount >= 1 && resourceScheme == file && editorTextFocus"
+      },
+      {
+        "command": "tabGroups.setGroupColor",
+        "key": "ctrl+alt+c",
+        "when": "workspaceFolderCount >= 1"
+      },
+      {
+        "command": "tabGroups.setGroupIcon",
+        "key": "ctrl+alt+i",
+        "when": "workspaceFolderCount >= 1"
       }
     ],
     "menus": {
       "view/title": [
         {
           "command": "tabGroups.createGroup",
-          "when": "view == tabGroupsView && workspaceFolderCount == 1",
+          "when": "view == tabGroupsView && workspaceFolderCount >= 1",
           "group": "navigation@1"
         },
         {
@@ -391,248 +419,283 @@
         },
         {
           "command": "tabGroups.createGroupFromOpenEditors",
-          "when": "view == tabGroupsView && workspaceFolderCount == 1",
+          "when": "view == tabGroupsView && workspaceFolderCount >= 1",
           "group": "1_workspace@1"
         },
         {
           "command": "tabGroups.addOpenEditorsToGroup",
-          "when": "view == tabGroupsView && workspaceFolderCount == 1",
+          "when": "view == tabGroupsView && workspaceFolderCount >= 1",
           "group": "1_workspace@2"
         },
         {
           "command": "tabGroups.createGroupFromGitChanges",
-          "when": "view == tabGroupsView && workspaceFolderCount == 1",
+          "when": "view == tabGroupsView && workspaceFolderCount >= 1",
           "group": "1_workspace@3"
         }
       ],
       "view/item/context": [
         {
+          "command": "tabGroups.createGroup",
+          "when": "view == tabGroupsView && viewItem == workspaceFolder && workspaceFolderCount >= 1",
+          "group": "inline"
+        },
+        {
+          "command": "tabGroups.createGroup",
+          "when": "view == tabGroupsView && viewItem == workspaceFolder && workspaceFolderCount >= 1",
+          "group": "1_folder@1"
+        },
+        {
           "command": "tabGroups.createSubGroup",
-          "when": "view == tabGroupsView && (viewItem == group || viewItem == groupRegex) && workspaceFolderCount == 1",
+          "when": "view == tabGroupsView && (viewItem == group || viewItem == groupRegex) && workspaceFolderCount >= 1",
           "group": "inline"
         },
         {
           "command": "tabGroups.deleteGroup",
-          "when": "view == tabGroupsView && viewItem == group && workspaceFolderCount == 1",
+          "when": "view == tabGroupsView && viewItem == group && workspaceFolderCount >= 1",
           "group": "1_group@1"
         },
         {
           "command": "tabGroups.renameGroup",
-          "when": "view == tabGroupsView && viewItem == group && workspaceFolderCount == 1",
+          "when": "view == tabGroupsView && viewItem == group && workspaceFolderCount >= 1",
           "group": "1_group@2"
         },
         {
+          "command": "tabGroups.setGroupColor",
+          "when": "view == tabGroupsView && (viewItem == group || viewItem == groupRegex) && workspaceFolderCount >= 1",
+          "group": "1_group@21"
+        },
+        {
+          "command": "tabGroups.setGroupIcon",
+          "when": "view == tabGroupsView && (viewItem == group || viewItem == groupRegex) && workspaceFolderCount >= 1",
+          "group": "1_group@22"
+        },
+        {
           "command": "tabGroups.createSubGroup",
-          "when": "view == tabGroupsView && (viewItem == group || viewItem == groupRegex) && workspaceFolderCount == 1",
+          "when": "view == tabGroupsView && (viewItem == group || viewItem == groupRegex) && workspaceFolderCount >= 1",
           "group": "1_group@25"
         },
         {
           "command": "tabGroups.expandAll",
-          "when": "view == tabGroupsView && (viewItem == group || viewItem == groupRegex) && workspaceFolderCount == 1",
+          "when": "view == tabGroupsView && (viewItem == group || viewItem == groupRegex) && workspaceFolderCount >= 1",
           "group": "1_group@3"
         },
         {
           "command": "tabGroups.collapseAll",
-          "when": "view == tabGroupsView && (viewItem == group || viewItem == groupRegex) && workspaceFolderCount == 1",
+          "when": "view == tabGroupsView && (viewItem == group || viewItem == groupRegex) && workspaceFolderCount >= 1",
           "group": "1_group@4"
         },
         {
           "command": "tabGroups.exportGroup",
-          "when": "view == tabGroupsView && (viewItem == group || viewItem == groupRegex) && workspaceFolderCount == 1",
+          "when": "view == tabGroupsView && (viewItem == group || viewItem == groupRegex) && workspaceFolderCount >= 1",
           "group": "1_group@5"
         },
         {
           "command": "tabGroups.copyGroupAsAiContext",
-          "when": "view == tabGroupsView && (viewItem == group || viewItem == groupRegex) && workspaceFolderCount == 1",
+          "when": "view == tabGroupsView && (viewItem == group || viewItem == groupRegex) && workspaceFolderCount >= 1",
           "group": "1_group@6"
         },
         {
           "command": "tabGroups.setManual",
-          "when": "view == tabGroupsView && viewItem == group && workspaceFolderCount == 1",
+          "when": "view == tabGroupsView && viewItem == group && workspaceFolderCount >= 1",
           "group": "2_config@1"
         },
         {
           "command": "tabGroups.setRegex",
-          "when": "view == tabGroupsView && viewItem == group && workspaceFolderCount == 1",
+          "when": "view == tabGroupsView && viewItem == group && workspaceFolderCount >= 1",
           "group": "2_config@2"
         },
         {
           "command": "tabGroups.setGlobalConfig",
-          "when": "view == tabGroupsView && viewItem == group && workspaceFolderCount == 1",
+          "when": "view == tabGroupsView && viewItem == group && workspaceFolderCount >= 1",
           "group": "2_config@3"
         },
         {
           "command": "tabGroups.manageGlobalConfigs",
-          "when": "view == tabGroupsView && viewItem == group && workspaceFolderCount == 1",
+          "when": "view == tabGroupsView && viewItem == group && workspaceFolderCount >= 1",
           "group": "2_config@4"
         },
         {
           "command": "tabGroups.scanFiles",
-          "when": "view == tabGroupsView && viewItem == groupRegex && workspaceFolderCount == 1",
+          "when": "view == tabGroupsView && viewItem == groupRegex && workspaceFolderCount >= 1",
           "group": "3_scan@1"
         },
         {
           "command": "tabGroups.openFile",
-          "when": "view == tabGroupsView && viewItem == file && workspaceFolderCount == 1",
+          "when": "view == tabGroupsView && viewItem == file && workspaceFolderCount >= 1",
           "group": "1_file@1"
         },
         {
           "command": "tabGroups.removeFile",
-          "when": "view == tabGroupsView && (viewItem == file || viewItem == missingFile) && workspaceFolderCount == 1",
+          "when": "view == tabGroupsView && (viewItem == file || viewItem == missingFile) && workspaceFolderCount >= 1",
           "group": "1_file@2"
         },
         {
           "command": "tabGroups.renameFile",
-          "when": "view == tabGroupsView && (viewItem == file || viewItem == missingFile) && workspaceFolderCount == 1",
+          "when": "view == tabGroupsView && (viewItem == file || viewItem == missingFile) && workspaceFolderCount >= 1",
           "group": "1_file@3"
         },
         {
           "command": "tabGroups.addCursor",
-          "when": "view == tabGroupsView && viewItem == file && workspaceFolderCount == 1",
+          "when": "view == tabGroupsView && viewItem == file && workspaceFolderCount >= 1",
           "group": "1_file@4"
         },
         {
           "command": "tabGroups.addFunction",
-          "when": "view == tabGroupsView && viewItem == file && workspaceFolderCount == 1",
+          "when": "view == tabGroupsView && viewItem == file && workspaceFolderCount >= 1",
           "group": "1_file@45"
         },
         {
           "command": "tabGroups.addText",
-          "when": "view == tabGroupsView && viewItem == file && workspaceFolderCount == 1",
+          "when": "view == tabGroupsView && viewItem == file && workspaceFolderCount >= 1",
           "group": "1_file@46"
         },
         {
           "command": "tabGroups.deleteMarker",
-          "when": "view == tabGroupsView && viewItem == marker && workspaceFolderCount == 1",
+          "when": "view == tabGroupsView && viewItem == marker && workspaceFolderCount >= 1",
           "group": "1_marker@1"
         },
         {
           "command": "tabGroups.renameMarker",
-          "when": "view == tabGroupsView && viewItem == marker && workspaceFolderCount == 1",
+          "when": "view == tabGroupsView && viewItem == marker && workspaceFolderCount >= 1",
           "group": "1_marker@2"
         },
         {
           "command": "tabGroups.copyPath",
-          "when": "view == tabGroupsView && (viewItem == file || viewItem == missingFile) && workspaceFolderCount == 1",
+          "when": "view == tabGroupsView && (viewItem == file || viewItem == missingFile) && workspaceFolderCount >= 1",
           "group": "1_file@5"
         }
       ],
       "webview/context": [
         {
+          "command": "tabGroups.createGroup",
+          "when": "webviewId == tabGroupsView && webviewItem == workspaceFolder && workspaceFolderCount >= 1",
+          "group": "1_folder@1"
+        },
+        {
           "command": "tabGroups.deleteGroup",
-          "when": "webviewId == tabGroupsView && webviewItem == group && workspaceFolderCount == 1",
+          "when": "webviewId == tabGroupsView && webviewItem == group && workspaceFolderCount >= 1",
           "group": "1_group@1"
         },
         {
           "command": "tabGroups.renameGroup",
-          "when": "webviewId == tabGroupsView && webviewItem == group && workspaceFolderCount == 1",
+          "when": "webviewId == tabGroupsView && webviewItem == group && workspaceFolderCount >= 1",
           "group": "1_group@2"
         },
         {
+          "command": "tabGroups.setGroupColor",
+          "when": "webviewId == tabGroupsView && (webviewItem == group || webviewItem == groupRegex) && workspaceFolderCount >= 1",
+          "group": "1_group@21"
+        },
+        {
+          "command": "tabGroups.setGroupIcon",
+          "when": "webviewId == tabGroupsView && (webviewItem == group || webviewItem == groupRegex) && workspaceFolderCount >= 1",
+          "group": "1_group@22"
+        },
+        {
           "command": "tabGroups.createSubGroup",
-          "when": "webviewId == tabGroupsView && (webviewItem == group || webviewItem == groupRegex) && workspaceFolderCount == 1",
+          "when": "webviewId == tabGroupsView && (webviewItem == group || webviewItem == groupRegex) && workspaceFolderCount >= 1",
           "group": "1_group@25"
         },
         {
           "command": "tabGroups.expandAll",
-          "when": "webviewId == tabGroupsView && (webviewItem == group || webviewItem == groupRegex) && workspaceFolderCount == 1",
+          "when": "webviewId == tabGroupsView && (webviewItem == group || webviewItem == groupRegex) && workspaceFolderCount >= 1",
           "group": "1_group@3"
         },
         {
           "command": "tabGroups.collapseAll",
-          "when": "webviewId == tabGroupsView && (webviewItem == group || webviewItem == groupRegex) && workspaceFolderCount == 1",
+          "when": "webviewId == tabGroupsView && (webviewItem == group || webviewItem == groupRegex) && workspaceFolderCount >= 1",
           "group": "1_group@4"
         },
         {
           "command": "tabGroups.exportGroup",
-          "when": "webviewId == tabGroupsView && (webviewItem == group || webviewItem == groupRegex) && workspaceFolderCount == 1",
+          "when": "webviewId == tabGroupsView && (webviewItem == group || webviewItem == groupRegex) && workspaceFolderCount >= 1",
           "group": "1_group@5"
         },
         {
           "command": "tabGroups.copyGroupAsAiContext",
-          "when": "webviewId == tabGroupsView && (webviewItem == group || webviewItem == groupRegex) && workspaceFolderCount == 1",
+          "when": "webviewId == tabGroupsView && (webviewItem == group || webviewItem == groupRegex) && workspaceFolderCount >= 1",
           "group": "1_group@6"
         },
         {
           "command": "tabGroups.setManual",
-          "when": "webviewId == tabGroupsView && webviewItem == group && workspaceFolderCount == 1",
+          "when": "webviewId == tabGroupsView && webviewItem == group && workspaceFolderCount >= 1",
           "group": "2_config@1"
         },
         {
           "command": "tabGroups.setRegex",
-          "when": "webviewId == tabGroupsView && webviewItem == group && workspaceFolderCount == 1",
+          "when": "webviewId == tabGroupsView && webviewItem == group && workspaceFolderCount >= 1",
           "group": "2_config@2"
         },
         {
           "command": "tabGroups.setGlobalConfig",
-          "when": "webviewId == tabGroupsView && webviewItem == group && workspaceFolderCount == 1",
+          "when": "webviewId == tabGroupsView && webviewItem == group && workspaceFolderCount >= 1",
           "group": "2_config@3"
         },
         {
           "command": "tabGroups.manageGlobalConfigs",
-          "when": "webviewId == tabGroupsView && webviewItem == group && workspaceFolderCount == 1",
+          "when": "webviewId == tabGroupsView && webviewItem == group && workspaceFolderCount >= 1",
           "group": "2_config@4"
         },
         {
           "command": "tabGroups.scanFiles",
-          "when": "webviewId == tabGroupsView && webviewItem == groupRegex && workspaceFolderCount == 1",
+          "when": "webviewId == tabGroupsView && webviewItem == groupRegex && workspaceFolderCount >= 1",
           "group": "3_scan@1"
         },
         {
           "command": "tabGroups.openFile",
-          "when": "webviewId == tabGroupsView && webviewItem == file && workspaceFolderCount == 1",
+          "when": "webviewId == tabGroupsView && webviewItem == file && workspaceFolderCount >= 1",
           "group": "1_file@1"
         },
         {
           "command": "tabGroups.removeFile",
-          "when": "webviewId == tabGroupsView && (webviewItem == file || webviewItem == missingFile) && workspaceFolderCount == 1",
+          "when": "webviewId == tabGroupsView && (webviewItem == file || webviewItem == missingFile) && workspaceFolderCount >= 1",
           "group": "1_file@2"
         },
         {
           "command": "tabGroups.renameFile",
-          "when": "webviewId == tabGroupsView && (webviewItem == file || webviewItem == missingFile) && workspaceFolderCount == 1",
+          "when": "webviewId == tabGroupsView && (webviewItem == file || webviewItem == missingFile) && workspaceFolderCount >= 1",
           "group": "1_file@3"
         },
         {
           "command": "tabGroups.addCursor",
-          "when": "webviewId == tabGroupsView && webviewItem == file && workspaceFolderCount == 1",
+          "when": "webviewId == tabGroupsView && webviewItem == file && workspaceFolderCount >= 1",
           "group": "1_file@4"
         },
         {
           "command": "tabGroups.addFunction",
-          "when": "webviewId == tabGroupsView && webviewItem == file && workspaceFolderCount == 1",
+          "when": "webviewId == tabGroupsView && webviewItem == file && workspaceFolderCount >= 1",
           "group": "1_file@45"
         },
         {
           "command": "tabGroups.addText",
-          "when": "webviewId == tabGroupsView && webviewItem == file && workspaceFolderCount == 1",
+          "when": "webviewId == tabGroupsView && webviewItem == file && workspaceFolderCount >= 1",
           "group": "1_file@46"
         },
         {
           "command": "tabGroups.deleteMarker",
-          "when": "webviewId == tabGroupsView && webviewItem == marker && workspaceFolderCount == 1",
+          "when": "webviewId == tabGroupsView && webviewItem == marker && workspaceFolderCount >= 1",
           "group": "1_marker@1"
         },
         {
           "command": "tabGroups.renameMarker",
-          "when": "webviewId == tabGroupsView && webviewItem == marker && workspaceFolderCount == 1",
+          "when": "webviewId == tabGroupsView && webviewItem == marker && workspaceFolderCount >= 1",
           "group": "1_marker@2"
         },
         {
           "command": "tabGroups.copyPath",
-          "when": "webviewId == tabGroupsView && (webviewItem == file || webviewItem == missingFile) && workspaceFolderCount == 1",
+          "when": "webviewId == tabGroupsView && (webviewItem == file || webviewItem == missingFile) && workspaceFolderCount >= 1",
           "group": "1_file@5"
         }
       ],
       "editor/title/context": [
         {
           "command": "tabGroups.addToGroup",
-          "when": "workspaceFolderCount == 1 && resourceScheme == file",
+          "when": "workspaceFolderCount >= 1 && resourceScheme == file",
           "group": "navigation"
         },
         {
           "command": "tabGroups.removeFromGroup",
-          "when": "workspaceFolderCount == 1 && resourceScheme == file",
+          "when": "workspaceFolderCount >= 1 && resourceScheme == file",
           "group": "navigation"
         }
       ]

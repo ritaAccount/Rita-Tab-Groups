@@ -1,0 +1,11 @@
+{
+  "description": "Marketplace 扩展版本（package.json）与当时捆绑的配置 schema / Skill 对照。发版成功后追加；只追加、不改历史行。回滚时：先查本文件 → 再打开 version/tab-groups/<configVersion>/ 与 version/skill/<skillVersion>/。",
+  "releases": [
+    {
+      "extension": "1.1.2",
+      "configVersion": "1.5.0",
+      "skillVersion": 3,
+      "note": "已发布基线的追溯记录（发版时尚未强制写入本表；schema/Skill 按当时公开能力近似）。自下一版起由发版脚本自动追加。"
+    }
+  ]
+}

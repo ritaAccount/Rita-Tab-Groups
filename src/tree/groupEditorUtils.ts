@@ -4,19 +4,22 @@ import { fileExistenceCache } from '../workspace/fileExistenceCache';
 import { openFileEntry } from './fileLocationUtils';
 import { toRelativePath } from '../workspace/workspaceUtils';
 
-export async function openGroupFiles(entries: GroupFileEntry[]): Promise<{ opened: number; skipped: number }> {
+export async function openGroupFiles(
+  folder: vscode.WorkspaceFolder,
+  entries: GroupFileEntry[],
+): Promise<{ opened: number; skipped: number }> {
   let opened = 0;
   let skipped = 0;
 
   for (let i = 0; i < entries.length; i++) {
     const entry = entries[i];
-    if (!(await fileExistenceCache.exists(entry.path))) {
+    if (!(await fileExistenceCache.exists(folder, entry.path))) {
       skipped++;
       continue;
     }
 
     const isLast = i === entries.length - 1;
-    const success = await openFileEntry(entry, { preserveFocus: !isLast });
+    const success = await openFileEntry(folder, entry, { preserveFocus: !isLast });
     if (success) {
       opened++;
     } else {
@@ -27,7 +30,10 @@ export async function openGroupFiles(entries: GroupFileEntry[]): Promise<{ opene
   return { opened, skipped };
 }
 
-export async function closeGroupFiles(files: string[]): Promise<number> {
+export async function closeGroupFiles(
+  folder: vscode.WorkspaceFolder,
+  files: string[],
+): Promise<number> {
   const fileSet = new Set(files);
   const tabsToClose: vscode.Tab[] = [];
 
@@ -38,7 +44,7 @@ export async function closeGroupFiles(files: string[]): Promise<number> {
         continue;
       }
 
-      const relativePath = toRelativePath(uri);
+      const relativePath = toRelativePath(uri, folder);
       if (relativePath && fileSet.has(relativePath)) {
         tabsToClose.push(tab);
       }

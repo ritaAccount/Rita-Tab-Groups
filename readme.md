@@ -53,7 +53,7 @@ Think of it as a **project map**, not a tab session saver.
 ### Quick start
 
 1. Install **Rita Tab Groups** (`Rita.rita-tab-groups`).
-2. Open a **single-folder** workspace (multi-root is not supported yet).
+2. Open a folder or multi-root workspace (each root keeps its own `.vscode/tab-groups.json`).
 3. Click the activity-bar icon → **＋** to create a group.
 4. Right-click an editor tab → **Add to Group**.
 5. Click a file in the sidebar to open it; expand markers to jump.
@@ -73,6 +73,8 @@ Rita Tab Groups              ＋  ⚙
 ```
 
 - Suffix after the name = group type: **manual**, **regex**, or a shared config id
+- **Multi-root**: top-level rows are workspace folders; each keeps its own `.vscode/tab-groups.json`
+- Right-click a group → **Set color** / **Set icon** (optional presets)
 - Missing files show grey + “(missing)” — right-click to remove
 - Search matches **group / file alias / marker** names; Settings expands include/exclude **workspace folders** (e.g. `src`, `dist`), not sidebar nodes
 - Hover search for “Enter = save history”; ↑ / ↓ recall past queries
@@ -257,7 +259,7 @@ Validated on save; watch escaping (`.` → `\.`).
 ### 五分钟上手
 
 1. 安装 **Rita Tab Groups**（`Rita.rita-tab-groups`）
-2. 用 VS Code **打开一个文件夹**（目前仅支持**单根**工作区）
+2. 用 VS Code **打开一个文件夹**，或打开**多根工作区**（每个根各自一份 `.vscode/tab-groups.json`）
 3. 点左侧活动栏图标 → **＋** 新建分组
 4. 在编辑器**标签上右键** → **加入分组**
 5. 在侧边栏点文件名打开；展开标记可跳转到具体位置
@@ -277,6 +279,8 @@ Validated on save; watch escaping (`.` → `\.`).
 ```
 
 - 名称后的括号 = 分组类型：**手动**、**正则**，或引用的全局配置名
+- **多根工作区**：顶层按工作区文件夹分区，每个根各自一份 `.vscode/tab-groups.json`
+- 分组可右键 **设置颜色 / 图标**（预设色板 + 少量图标）
 - 文件没了会灰显并标「（不存在）」，右键可移除
 - 搜索匹配的是**分组名 / 文件别名 / 标记名**；设置里的包含/排除填的是项目里的**文件夹路径**（如 `src`、`dist`），不是侧边栏节点
 - 鼠标停在搜索框：提示 Enter 写入历史；↑ / ↓ 翻历史
@@ -340,7 +344,7 @@ Validated on save; watch escaping (`.` → `\.`).
 | 字符匹配 | `Ctrl+Shift+'` |
 | 上一 / 下一标记 | `Ctrl+Shift+[` / `]` |
 
-保存快捷键需要已打开单根工作区；无文件夹时仍可预览设置页，但不能保存。
+保存快捷键需要已打开工作区；无文件夹时仍可预览设置页，但不能保存。
 
 ### 三种建组方式
 
@@ -393,7 +397,7 @@ Validated on save; watch escaping (`.` → `\.`).
 
 | 情况 | 说明 |
 |------|------|
-| 工作区 | 目前仅**单根**（一个文件夹） |
+| 工作区 | 单根或多根（每根各自配置；侧边栏按文件夹分区） |
 | 移动 / 重命名 | 存的是相对路径，路径变了会显示不存在 |
 | 正则扫描 | **覆盖**该组文件列表；量大时有进度，可取消 |
 | 删除分组 | 若全局配置已无引用，会询问是否一并删掉 |

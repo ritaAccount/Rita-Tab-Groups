@@ -137,6 +137,9 @@ function resolveNodeIcon(
       return fromTheme;
     }
   }
+  if (node.icon?.kind === 'codicon') {
+    return node.icon;
+  }
   return { kind: 'codicon', id: node.iconId || defaultCodicon(node) };
 }
 

@@ -1,0 +1,11 @@
+{
+  "version": 5,
+  "kind": "skill",
+  "from": 4,
+  "summary": "schema 1.6.0：分组可选 color / icon",
+  "changes": [
+    "配置 version 对齐 1.6.0",
+    "说明 Group 可选 color（预设色板）与 icon（Codicon 白名单）"
+  ],
+  "targets": [".cursor/skills/tab-groups/SKILL.md"]
+}

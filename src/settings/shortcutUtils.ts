@@ -9,7 +9,7 @@ import {
   SHORTCUT_WHEN,
   ShortcutSettings,
 } from '../data/types';
-import { getWorkspaceFolder } from '../workspace/workspaceUtils';
+import { getWorkspaceFolders, isValidWorkspace } from '../workspace/workspaceUtils';
 
 interface KeybindingEntry {
   key: string;
@@ -34,57 +34,71 @@ const SHORTCUT_ENTRIES: Array<{
   { settingKey: 'addText', command: SHORTCUT_COMMANDS.addText, when: SHORTCUT_WHEN.fileEditor },
   { settingKey: 'prevCursor', command: SHORTCUT_COMMANDS.prevCursor, when: SHORTCUT_WHEN.fileEditor },
   { settingKey: 'nextCursor', command: SHORTCUT_COMMANDS.nextCursor, when: SHORTCUT_WHEN.fileEditor },
+  { settingKey: 'setGroupColor', command: SHORTCUT_COMMANDS.setGroupColor, when: SHORTCUT_WHEN.workspace },
+  { settingKey: 'setGroupIcon', command: SHORTCUT_COMMANDS.setGroupIcon, when: SHORTCUT_WHEN.workspace },
 ];
 
 const SHORTCUT_KEYS = Object.keys(DEFAULT_SHORTCUTS) as Array<keyof ShortcutSettings>;
 
+/** 空字符串表示不绑定；非空须符合组合键格式。 */
 export function validateShortcut(value: string): boolean {
-  return SHORTCUT_PATTERN.test(value.trim());
+  const trimmed = value.trim();
+  return trimmed === '' || SHORTCUT_PATTERN.test(trimmed);
 }
 
 function validateAllShortcuts(shortcuts: ShortcutSettings): boolean {
   return SHORTCUT_KEYS.every((key) => validateShortcut(shortcuts[key]));
 }
 
+/** undefined → 默认值；显式 `""` → 不绑定。 */
+function resolveShortcut(raw: string | undefined, fallback: string): string {
+  if (typeof raw !== 'string') {
+    return fallback;
+  }
+  return raw.trim();
+}
+
 function mergeShortcutSettings(partial?: Partial<ShortcutSettings>): ShortcutSettings {
   return {
-    addToGroup: partial?.addToGroup?.trim() || DEFAULT_SHORTCUTS.addToGroup,
-    removeFromGroup: partial?.removeFromGroup?.trim() || DEFAULT_SHORTCUTS.removeFromGroup,
-    createGroup: partial?.createGroup?.trim() || DEFAULT_SHORTCUTS.createGroup,
-    deleteGroup: partial?.deleteGroup?.trim() || DEFAULT_SHORTCUTS.deleteGroup,
-    addCursor: partial?.addCursor?.trim() || DEFAULT_SHORTCUTS.addCursor,
-    addFunction: partial?.addFunction?.trim() || DEFAULT_SHORTCUTS.addFunction,
-    addText: partial?.addText?.trim() || DEFAULT_SHORTCUTS.addText,
-    prevCursor: partial?.prevCursor?.trim() || DEFAULT_SHORTCUTS.prevCursor,
-    nextCursor: partial?.nextCursor?.trim() || DEFAULT_SHORTCUTS.nextCursor,
+    addToGroup: resolveShortcut(partial?.addToGroup, DEFAULT_SHORTCUTS.addToGroup),
+    removeFromGroup: resolveShortcut(partial?.removeFromGroup, DEFAULT_SHORTCUTS.removeFromGroup),
+    createGroup: resolveShortcut(partial?.createGroup, DEFAULT_SHORTCUTS.createGroup),
+    deleteGroup: resolveShortcut(partial?.deleteGroup, DEFAULT_SHORTCUTS.deleteGroup),
+    addCursor: resolveShortcut(partial?.addCursor, DEFAULT_SHORTCUTS.addCursor),
+    addFunction: resolveShortcut(partial?.addFunction, DEFAULT_SHORTCUTS.addFunction),
+    addText: resolveShortcut(partial?.addText, DEFAULT_SHORTCUTS.addText),
+    prevCursor: resolveShortcut(partial?.prevCursor, DEFAULT_SHORTCUTS.prevCursor),
+    nextCursor: resolveShortcut(partial?.nextCursor, DEFAULT_SHORTCUTS.nextCursor),
+    setGroupColor: resolveShortcut(partial?.setGroupColor, DEFAULT_SHORTCUTS.setGroupColor),
+    setGroupIcon: resolveShortcut(partial?.setGroupIcon, DEFAULT_SHORTCUTS.setGroupIcon),
   };
 }
 
 export function getShortcuts(): ShortcutSettings {
-  const folder = getWorkspaceFolder();
+  const folder = getWorkspaceFolders()[0];
   const config = vscode.workspace.getConfiguration('tabGroups', folder?.uri);
   return mergeShortcutSettings(config.get<Partial<ShortcutSettings>>('shortcuts'));
 }
 
 export async function ensureWorkspaceShortcutSettings(): Promise<void> {
-  const folder = getWorkspaceFolder();
-  if (!folder) {
+  if (!isValidWorkspace()) {
     return;
   }
 
-  const config = vscode.workspace.getConfiguration('tabGroups', folder.uri);
+  const config = vscode.workspace.getConfiguration('tabGroups');
   const workspaceValue = config.inspect<Partial<ShortcutSettings>>('shortcuts')?.workspaceValue;
   const merged = mergeShortcutSettings(workspaceValue);
-  const isComplete = SHORTCUT_KEYS.every((key) => workspaceValue?.[key]);
+  // 允许值为 ""（不绑定）；仅缺 key 时才补全
+  const isComplete =
+    !!workspaceValue && SHORTCUT_KEYS.every((key) => typeof workspaceValue[key] === 'string');
 
-  if (!workspaceValue || !isComplete) {
+  if (!isComplete) {
     await config.update('shortcuts', merged, vscode.ConfigurationTarget.Workspace);
   }
 }
 
 export async function saveShortcuts(shortcuts: ShortcutSettings): Promise<void> {
-  const folder = getWorkspaceFolder();
-  if (!folder) {
+  if (!isValidWorkspace()) {
     throw new Error('NO_WORKSPACE');
   }
 
@@ -92,19 +106,15 @@ export async function saveShortcuts(shortcuts: ShortcutSettings): Promise<void> 
     throw new Error('INVALID_FORMAT');
   }
 
-  const config = vscode.workspace.getConfiguration('tabGroups', folder.uri);
-  await config.update('shortcuts', shortcuts, vscode.ConfigurationTarget.Workspace);
+  const normalized = mergeShortcutSettings(shortcuts);
+  const config = vscode.workspace.getConfiguration('tabGroups');
+  await config.update('shortcuts', normalized, vscode.ConfigurationTarget.Workspace);
   await syncKeybindingsFromSettings();
 }
 
 export async function syncKeybindingsFromSettings(): Promise<void> {
   const shortcuts = getShortcuts();
   const keybindingsPath = getUserKeybindingsPath();
-  const entries: KeybindingEntry[] = SHORTCUT_ENTRIES.map(({ settingKey, command, when }) => ({
-    key: shortcuts[settingKey],
-    command,
-    when,
-  }));
 
   let bindings: KeybindingEntry[] = [];
   try {
@@ -116,11 +126,28 @@ export async function syncKeybindingsFromSettings(): Promise<void> {
     }
   }
 
-  bindings = bindings.filter((entry) => !MANAGED_SHORTCUT_COMMANDS.includes(entry.command as typeof MANAGED_SHORTCUT_COMMANDS[number]));
-  bindings.push(...entries);
+  bindings = bindings.filter((entry) => !isManagedShortcutCommand(entry.command));
+
+  for (const { settingKey, command, when } of SHORTCUT_ENTRIES) {
+    const key = shortcuts[settingKey].trim();
+    if (key) {
+      bindings.push({ key, command, when });
+      continue;
+    }
+    // 空 = 不绑定：写入 -command，覆盖 package.json 默认键
+    const defaultKey = DEFAULT_SHORTCUTS[settingKey];
+    if (defaultKey) {
+      bindings.push({ key: defaultKey, command: `-${command}` });
+    }
+  }
 
   await fs.mkdir(path.dirname(keybindingsPath), { recursive: true });
   await fs.writeFile(keybindingsPath, `${JSON.stringify(bindings, null, 2)}\n`, 'utf8');
+}
+
+function isManagedShortcutCommand(command: string): boolean {
+  const bare = command.startsWith('-') ? command.slice(1) : command;
+  return (MANAGED_SHORTCUT_COMMANDS as readonly string[]).includes(bare);
 }
 
 export function getUserKeybindingsPath(): string {

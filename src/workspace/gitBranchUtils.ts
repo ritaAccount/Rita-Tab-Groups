@@ -1,21 +1,17 @@
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import * as vscode from 'vscode';
-import { getWorkspaceFolder } from './workspaceUtils';
 
 const execFileAsync = promisify(execFile);
 
 /**
- * 读取当前工作区所在 Git 仓库的分支名。
+ * 读取指定工作区根所在 Git 仓库的分支名。
  * 优先用内置 Git 扩展 API；失败时回退 `git rev-parse`。
  * 无仓库 / 无法解析时返回 undefined。
  */
-export async function getCurrentGitBranch(): Promise<string | undefined> {
-  const folder = getWorkspaceFolder();
-  if (!folder) {
-    return undefined;
-  }
-
+export async function getCurrentGitBranch(
+  folder: vscode.WorkspaceFolder,
+): Promise<string | undefined> {
   const fromApi = await tryGetBranchFromGitExtension(folder.uri);
   if (fromApi) {
     return fromApi;

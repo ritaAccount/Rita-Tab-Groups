@@ -26,6 +26,7 @@ export {
 export async function buildAiContextContentsMarkdown(
   groupName: string,
   relativePaths: string[],
+  folder: vscode.WorkspaceFolder,
   options?: { maxFileBytes?: number },
 ): Promise<AiContextBuildResult> {
   const maxFileBytes = options?.maxFileBytes ?? AI_CONTEXT_MAX_FILE_BYTES;
@@ -40,11 +41,7 @@ export async function buildAiContextContentsMarkdown(
   let skippedLarge = 0;
 
   for (const relativePath of relativePaths) {
-    const uri = toAbsoluteUri(relativePath);
-    if (!uri) {
-      skippedMissing += 1;
-      continue;
-    }
+    const uri = toAbsoluteUri(relativePath, folder);
 
     let bytes: Uint8Array;
     try {

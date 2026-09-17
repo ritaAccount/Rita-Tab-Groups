@@ -2,13 +2,13 @@ import * as vscode from 'vscode';
 import { closeGroupFiles, openGroupFiles } from './groupEditorUtils';
 import { getMatchingActiveEditor, openFileAtMarker, openFileEntry, resolveEnclosingFunctionSymbol, revealMarkerInEditor } from './fileLocationUtils';
 import { TabGroupsManager } from '../data/tabGroupsManager';
-import { FileTreeItem, GroupTreeItem, MarkerTreeItem, MarkerTypeTreeItem, TabGroupsTreeProvider, TreeElement } from './treeProvider';
+import { TabGroupsWorkspace } from '../data/tabGroupsWorkspace';
+import { FileTreeItem, GroupTreeItem, MarkerTreeItem, MarkerTypeTreeItem, TabGroupsTreeProvider, TreeElement, WorkspaceFolderTreeItem } from './treeProvider';
 import { sortFlatMarkersByLine, flattenMarkers, countMarkers } from '../data/fileEntryUtils';
 
 type TabGroupsTreeElement = TreeElement;
 import {
   ensureValidWorkspace,
-  toAbsoluteUri,
   toRelativePath,
 } from '../workspace/workspaceUtils';
 import {
@@ -27,10 +27,11 @@ import {
 import { TabGroupsSearchViewProvider } from './searchView';
 import { runExportTabGroups } from '../settings/importExportCommands';
 import { getGroupPathLabel } from '../data/groupHierarchyUtils';
+import { GROUP_COLOR_OPTIONS, GROUP_ICON_OPTIONS } from '../data/groupAppearanceUtils';
 
 export function registerCommands(
   context: vscode.ExtensionContext,
-  manager: TabGroupsManager,
+  workspace: TabGroupsWorkspace,
   treeProvider: TabGroupsTreeProvider,
   sidebar: TabGroupsSearchViewProvider,
 ): void {
@@ -38,9 +39,29 @@ export function registerCommands(
     context.subscriptions.push(vscode.commands.registerCommand(command, callback));
   };
 
-  register('tabGroups.createGroup', async () => {
-    const folder = await ensureValidWorkspace();
-    if (!folder) {
+  const managerForGroup = (groupId: string): TabGroupsManager | undefined =>
+    workspace.findManagerByGroupId(groupId);
+
+  const requireFolders = async (): Promise<boolean> => {
+    return !!(await ensureValidWorkspace());
+  };
+
+  register('tabGroups.createGroup', async (item?: WorkspaceFolderTreeItem | GroupTreeItem) => {
+    if (!(await requireFolders())) {
+      return;
+    }
+
+    const preferred =
+      item instanceof WorkspaceFolderTreeItem
+        ? item.folder
+        : item instanceof GroupTreeItem
+          ? item.folder
+          : undefined;
+    const manager = await workspace.resolveTargetManager(
+      preferred,
+      '选择要新建分组的工作区文件夹',
+    );
+    if (!manager) {
       return;
     }
 
@@ -59,14 +80,21 @@ export function registerCommands(
   });
 
   register('tabGroups.createGroupFromOpenEditors', async () => {
-    const folder = await ensureValidWorkspace();
-    if (!folder) {
+    if (!(await requireFolders())) {
       return;
     }
 
-    const paths = collectOpenEditorRelativePaths();
+    const manager = await workspace.resolveTargetManager(
+      undefined,
+      '选择要将打开标签加入的工作区文件夹',
+    );
+    if (!manager) {
+      return;
+    }
+
+    const paths = collectOpenEditorRelativePaths(manager.folder);
     if (paths.length === 0) {
-      await vscode.window.showInformationMessage('当前没有可加入分组的已打开工作区文件。');
+      await vscode.window.showInformationMessage('当前没有可加入该文件夹的已打开工作区文件。');
       return;
     }
 
@@ -90,14 +118,21 @@ export function registerCommands(
   });
 
   register('tabGroups.addOpenEditorsToGroup', async () => {
-    const folder = await ensureValidWorkspace();
-    if (!folder) {
+    if (!(await requireFolders())) {
       return;
     }
 
-    const paths = collectOpenEditorRelativePaths();
+    const manager = await workspace.resolveTargetManager(
+      undefined,
+      '选择目标工作区文件夹',
+    );
+    if (!manager) {
+      return;
+    }
+
+    const paths = collectOpenEditorRelativePaths(manager.folder);
     if (paths.length === 0) {
-      await vscode.window.showInformationMessage('当前没有可加入分组的已打开工作区文件。');
+      await vscode.window.showInformationMessage('当前没有可加入该文件夹的已打开工作区文件。');
       return;
     }
 
@@ -129,19 +164,26 @@ export function registerCommands(
   });
 
   register('tabGroups.createGroupFromGitChanges', async () => {
-    const folder = await ensureValidWorkspace();
-    if (!folder) {
+    if (!(await requireFolders())) {
       return;
     }
 
-    const collected = await collectGitChangesWithRepoPick();
+    const manager = await workspace.resolveTargetManager(
+      undefined,
+      '选择要收集 Git 变更的工作区文件夹',
+    );
+    if (!manager) {
+      return;
+    }
+
+    const collected = await collectGitChangesWithRepoPick(manager.folder);
     if (!collected.ok) {
       if (collected.reason === 'cancelled') {
         return;
       }
       if (collected.reason === 'no-repos') {
         await vscode.window.showInformationMessage(
-          '当前工作区未找到 Git 仓库。若前后端是独立仓库，请确认它们位于工作区子文件夹内。',
+          '当前工作区文件夹未找到 Git 仓库。若前后端是独立仓库，请确认它们位于该文件夹子目录内。',
         );
         return;
       }
@@ -182,14 +224,19 @@ export function registerCommands(
   });
 
   register('tabGroups.exportGroup', async (item?: GroupTreeItem) => {
-    const folder = await ensureValidWorkspace();
-    if (!folder) {
+    if (!(await requireFolders())) {
       return;
     }
 
-    const group = resolveGroupItem(item, sidebar)?.group;
-    if (!group) {
+    const groupItem = resolveGroupItem(item, sidebar);
+    const group = groupItem?.group;
+    if (!group || !groupItem) {
       await vscode.window.showWarningMessage('请先在侧边栏选中一个分组。');
+      return;
+    }
+
+    const manager = managerForGroup(group.id);
+    if (!manager) {
       return;
     }
 
@@ -197,14 +244,19 @@ export function registerCommands(
   });
 
   register('tabGroups.copyGroupAsAiContext', async (item?: GroupTreeItem) => {
-    const folder = await ensureValidWorkspace();
-    if (!folder) {
+    if (!(await requireFolders())) {
       return;
     }
 
-    const group = resolveGroupItem(item, sidebar)?.group;
-    if (!group) {
+    const groupItem = resolveGroupItem(item, sidebar);
+    const group = groupItem?.group;
+    if (!group || !groupItem) {
       await vscode.window.showWarningMessage('请先在侧边栏选中一个分组。');
+      return;
+    }
+
+    const manager = managerForGroup(group.id);
+    if (!manager) {
       return;
     }
 
@@ -236,7 +288,7 @@ export function registerCommands(
     const result =
       modePick.mode === 'paths'
         ? buildAiContextPathsMarkdown(group.name, relativePaths)
-        : await buildAiContextContentsMarkdown(group.name, relativePaths);
+        : await buildAiContextContentsMarkdown(group.name, relativePaths, manager.folder);
 
     await vscode.env.clipboard.writeText(result.text);
 
@@ -259,13 +311,22 @@ export function registerCommands(
   });
 
   register('tabGroups.deleteGroup', async (item?: GroupTreeItem) => {
-    const folder = await ensureValidWorkspace();
-    if (!folder) {
+    if (!(await requireFolders())) {
       return;
     }
 
-    let group = resolveGroupItem(item, sidebar)?.group;
-    if (!group) {
+    let groupItem = resolveGroupItem(item, sidebar);
+    let group = groupItem?.group;
+    let manager = group ? managerForGroup(group.id) : undefined;
+    if (!group || !manager) {
+      const targetManager = await workspace.resolveTargetManager(
+        undefined,
+        '选择要删除分组的工作区文件夹',
+      );
+      if (!targetManager) {
+        return;
+      }
+      manager = targetManager;
       const rootGroups = manager.getRootGroups();
       if (rootGroups.length === 0) {
         await vscode.window.showInformationMessage('暂无分组可删除。');
@@ -326,13 +387,17 @@ export function registerCommands(
   });
 
   register('tabGroups.createSubGroup', async (item?: GroupTreeItem) => {
-    const folder = await ensureValidWorkspace();
-    if (!folder) {
+    if (!(await requireFolders())) {
       return;
     }
 
     const groupItem = resolveGroupItem(item, sidebar);
     if (!groupItem) {
+      return;
+    }
+
+    const manager = managerForGroup(groupItem.group.id);
+    if (!manager) {
       return;
     }
 
@@ -352,13 +417,17 @@ export function registerCommands(
   });
 
   register('tabGroups.renameGroup', async (item?: GroupTreeItem) => {
-    const folder = await ensureValidWorkspace();
-    if (!folder) {
+    if (!(await requireFolders())) {
       return;
     }
 
     const groupItem = resolveGroupItem(item, sidebar);
     if (!groupItem) {
+      return;
+    }
+
+    const manager = managerForGroup(groupItem.group.id);
+    if (!manager) {
       return;
     }
 
@@ -376,14 +445,114 @@ export function registerCommands(
     vscode.window.setStatusBarMessage(`分组已重命名为「${newName.trim()}」`, 3000);
   });
 
-  register('tabGroups.expandAll', async (item?: GroupTreeItem) => {
-    const folder = await ensureValidWorkspace();
-    if (!folder) {
+  register('tabGroups.setGroupColor', async (item?: GroupTreeItem) => {
+    if (!(await requireFolders())) {
       return;
     }
 
     const groupItem = resolveGroupItem(item, sidebar);
     if (!groupItem) {
+      await vscode.window.showWarningMessage('请先在侧边栏选中一个分组。');
+      return;
+    }
+
+    const manager = managerForGroup(groupItem.group.id);
+    if (!manager) {
+      return;
+    }
+
+    const picked = await vscode.window.showQuickPick(
+      [
+        {
+          label: '默认（无颜色）',
+          description: groupItem.group.color ? '清除当前颜色' : '当前',
+          colorId: undefined as string | undefined,
+        },
+        ...GROUP_COLOR_OPTIONS.map((option) => ({
+          label: `$(circle-filled) ${option.label}`,
+          description: option.id === groupItem.group.color ? '当前' : option.id,
+          colorId: option.id as string | undefined,
+        })),
+      ],
+      { placeHolder: `为「${groupItem.group.name}」选择颜色` },
+    );
+    if (!picked) {
+      return;
+    }
+
+    const ok = await manager.setGroupColor(groupItem.group.id, picked.colorId);
+    if (!ok) {
+      return;
+    }
+    treeProvider.refresh();
+    vscode.window.setStatusBarMessage(
+      picked.colorId
+        ? `分组「${groupItem.group.name}」颜色已设为 ${picked.colorId}`
+        : `分组「${groupItem.group.name}」已恢复默认颜色`,
+      3000,
+    );
+  });
+
+  register('tabGroups.setGroupIcon', async (item?: GroupTreeItem) => {
+    if (!(await requireFolders())) {
+      return;
+    }
+
+    const groupItem = resolveGroupItem(item, sidebar);
+    if (!groupItem) {
+      await vscode.window.showWarningMessage('请先在侧边栏选中一个分组。');
+      return;
+    }
+
+    const manager = managerForGroup(groupItem.group.id);
+    if (!manager) {
+      return;
+    }
+
+    const picked = await vscode.window.showQuickPick(
+      [
+        {
+          label: '默认（文件夹）',
+          description: groupItem.group.icon ? '清除自定义图标' : '当前',
+          iconId: undefined as string | undefined,
+        },
+        ...GROUP_ICON_OPTIONS.map((option) => ({
+          label: `$(${option.id}) ${option.label}`,
+          description: option.id === groupItem.group.icon ? '当前' : option.id,
+          iconId: option.id as string | undefined,
+        })),
+      ],
+      { placeHolder: `为「${groupItem.group.name}」选择图标` },
+    );
+    if (!picked) {
+      return;
+    }
+
+    const ok = await manager.setGroupIcon(groupItem.group.id, picked.iconId);
+    if (!ok) {
+      return;
+    }
+    treeProvider.refresh();
+    vscode.window.setStatusBarMessage(
+      picked.iconId
+        ? `分组「${groupItem.group.name}」图标已设为 ${picked.iconId}`
+        : `分组「${groupItem.group.name}」已恢复默认图标`,
+      3000,
+    );
+  });
+
+  register('tabGroups.expandAll', async (item?: GroupTreeItem) => {
+    if (!(await requireFolders())) {
+      return;
+    }
+
+    const groupItem = resolveGroupItem(item, sidebar);
+    if (!groupItem) {
+      return;
+    }
+
+    const manager = managerForGroup(groupItem.group.id);
+    if (!manager) {
       return;
     }
 
@@ -394,7 +563,7 @@ export function registerCommands(
       return;
     }
 
-    const { opened, skipped } = await openGroupFiles(fileEntries);
+    const { opened, skipped } = await openGroupFiles(groupItem.folder, fileEntries);
     if (opened === 0) {
       await vscode.window.showWarningMessage(`分组「${name}」中没有可打开的文件。`);
       return;
@@ -405,13 +574,17 @@ export function registerCommands(
   });
 
   register('tabGroups.collapseAll', async (item?: GroupTreeItem) => {
-    const folder = await ensureValidWorkspace();
-    if (!folder) {
+    if (!(await requireFolders())) {
       return;
     }
 
     const groupItem = resolveGroupItem(item, sidebar);
     if (!groupItem) {
+      return;
+    }
+
+    const manager = managerForGroup(groupItem.group.id);
+    if (!manager) {
       return;
     }
 
@@ -422,7 +595,7 @@ export function registerCommands(
       return;
     }
 
-    const closed = await closeGroupFiles(filePaths);
+    const closed = await closeGroupFiles(groupItem.folder, filePaths);
     if (closed === 0) {
       await vscode.window.showInformationMessage(`分组「${name}」中没有已打开的标签页。`);
       return;
@@ -432,13 +605,17 @@ export function registerCommands(
   });
 
   register('tabGroups.setManual', async (item?: GroupTreeItem) => {
-    const folder = await ensureValidWorkspace();
-    if (!folder) {
+    if (!(await requireFolders())) {
       return;
     }
 
     const groupItem = resolveGroupItem(item, sidebar);
     if (!groupItem) {
+      return;
+    }
+
+    const manager = managerForGroup(groupItem.group.id);
+    if (!manager) {
       return;
     }
 
@@ -448,13 +625,17 @@ export function registerCommands(
   });
 
   register('tabGroups.setRegex', async (item?: GroupTreeItem) => {
-    const folder = await ensureValidWorkspace();
-    if (!folder) {
+    if (!(await requireFolders())) {
       return;
     }
 
     const groupItem = resolveGroupItem(item, sidebar);
     if (!groupItem) {
+      return;
+    }
+
+    const manager = managerForGroup(groupItem.group.id);
+    if (!manager) {
       return;
     }
 
@@ -479,13 +660,17 @@ export function registerCommands(
   });
 
   register('tabGroups.setGlobalConfig', async (item?: GroupTreeItem) => {
-    const folder = await ensureValidWorkspace();
-    if (!folder) {
+    if (!(await requireFolders())) {
       return;
     }
 
     const groupItem = resolveGroupItem(item, sidebar);
     if (!groupItem) {
+      return;
+    }
+
+    const manager = managerForGroup(groupItem.group.id);
+    if (!manager) {
       return;
     }
 
@@ -513,8 +698,15 @@ export function registerCommands(
   });
 
   register('tabGroups.manageGlobalConfigs', async () => {
-    const folder = await ensureValidWorkspace();
-    if (!folder) {
+    if (!(await requireFolders())) {
+      return;
+    }
+
+    const manager = await workspace.resolveTargetManager(
+      undefined,
+      '选择要编辑全局配置的工作区文件夹',
+    );
+    if (!manager) {
       return;
     }
 
@@ -536,13 +728,17 @@ export function registerCommands(
   });
 
   register('tabGroups.scanFiles', async (item?: GroupTreeItem) => {
-    const folder = await ensureValidWorkspace();
-    if (!folder) {
+    if (!(await requireFolders())) {
       return;
     }
 
     const groupItem = resolveGroupItem(item, sidebar);
     if (!groupItem) {
+      return;
+    }
+
+    const manager = managerForGroup(groupItem.group.id);
+    if (!manager) {
       return;
     }
 
@@ -567,7 +763,10 @@ export function registerCommands(
       async (progress, token) => {
         progress.report({ message: '正在查找工作区文件...' });
 
-        const uris = await vscode.workspace.findFiles('**/*', '**/node_modules/**');
+        const uris = await vscode.workspace.findFiles(
+          new vscode.RelativePattern(manager.folder, '**/*'),
+          '**/node_modules/**',
+        );
         if (token.isCancellationRequested) {
           return;
         }
@@ -577,8 +776,8 @@ export function registerCommands(
           if (token.isCancellationRequested) {
             return;
           }
-          const relativePath = vscode.workspace.asRelativePath(uri, false);
-          if (!relativePath.startsWith('/') && !relativePath.includes('://') && regex.test(relativePath)) {
+          const relativePath = toRelativePath(uri, manager.folder);
+          if (relativePath && regex.test(relativePath)) {
             matched.push(relativePath);
           }
         }
@@ -595,31 +794,30 @@ export function registerCommands(
   });
 
   register('tabGroups.openFile', async (item?: FileTreeItem) => {
-    const folder = await ensureValidWorkspace();
     item = resolveFileItem(item, sidebar);
-    if (!folder || !item) {
+    if (!item) {
       return;
     }
 
-    const success = await openFileEntry(item.fileEntry);
+    const success = await openFileEntry(item.folder, item.fileEntry);
     if (!success) {
       await vscode.window.showErrorMessage(`无法打开文件：${item.relativePath}`);
     }
   });
 
   register('tabGroups.openMarker', async (item?: MarkerTreeItem) => {
-    const folder = await ensureValidWorkspace();
     item = item instanceof MarkerTreeItem ? item : asMarker(sidebar.getSelection());
-    if (!folder || !item) {
+    if (!item) {
       return;
     }
 
-    const entry = manager.getFileEntry(item.groupId, item.relativePath);
-    if (!entry) {
+    const manager = managerForGroup(item.groupId);
+    const entry = manager?.getFileEntry(item.groupId, item.relativePath);
+    if (!manager || !entry) {
       return;
     }
 
-    const success = await openFileAtMarker(entry, item.marker);
+    const success = await openFileAtMarker(item.folder, entry, item.marker);
     if (!success) {
       await vscode.window.showErrorMessage(`无法打开文件：${item.relativePath}`);
     }
@@ -631,17 +829,17 @@ export function registerCommands(
   });
 
   register('tabGroups.addCursor', async (item?: FileTreeItem) => {
-    const folder = await ensureValidWorkspace();
-    if (!folder) {
+    if (!(await requireFolders())) {
       return;
     }
 
-    const target = await resolveAddMarkerTarget(item, manager, sidebar);
-    if (!target) {
+    const resolved = await resolveAddMarkerTarget(item, workspace, sidebar);
+    if (!resolved) {
       return;
     }
+    const { target, manager } = resolved;
 
-    const editor = getMatchingActiveEditor(target.relativePath);
+    const editor = getMatchingActiveEditor(manager.folder, target.relativePath);
     if (!editor) {
       await vscode.window.showWarningMessage(`请打开「${target.relativePath}」并将光标置于目标行。`);
       return;
@@ -662,17 +860,17 @@ export function registerCommands(
   });
 
   register('tabGroups.addFunction', async (item?: FileTreeItem) => {
-    const folder = await ensureValidWorkspace();
-    if (!folder) {
+    if (!(await requireFolders())) {
       return;
     }
 
-    const target = await resolveAddMarkerTarget(item, manager, sidebar);
-    if (!target) {
+    const resolved = await resolveAddMarkerTarget(item, workspace, sidebar);
+    if (!resolved) {
       return;
     }
+    const { target, manager } = resolved;
 
-    const editor = getMatchingActiveEditor(target.relativePath);
+    const editor = getMatchingActiveEditor(manager.folder, target.relativePath);
     if (!editor) {
       await vscode.window.showWarningMessage(`请打开「${target.relativePath}」并将光标置于函数内。`);
       return;
@@ -705,17 +903,17 @@ export function registerCommands(
   });
 
   register('tabGroups.addText', async (item?: FileTreeItem) => {
-    const folder = await ensureValidWorkspace();
-    if (!folder) {
+    if (!(await requireFolders())) {
       return;
     }
 
-    const target = await resolveAddMarkerTarget(item, manager, sidebar);
-    if (!target) {
+    const resolved = await resolveAddMarkerTarget(item, workspace, sidebar);
+    if (!resolved) {
       return;
     }
+    const { target, manager } = resolved;
 
-    const editor = getMatchingActiveEditor(target.relativePath);
+    const editor = getMatchingActiveEditor(manager.folder, target.relativePath);
     if (!editor) {
       await vscode.window.showWarningMessage(`请打开「${target.relativePath}」并选中或定位要匹配的文本。`);
       return;
@@ -758,9 +956,13 @@ export function registerCommands(
   });
 
   register('tabGroups.deleteMarker', async (item?: MarkerTreeItem) => {
-    const folder = await ensureValidWorkspace();
     item = item instanceof MarkerTreeItem ? item : asMarker(sidebar.getSelection());
-    if (!folder || !item) {
+    if (!item) {
+      return;
+    }
+
+    const manager = managerForGroup(item.groupId);
+    if (!manager) {
       return;
     }
 
@@ -783,9 +985,13 @@ export function registerCommands(
   });
 
   register('tabGroups.renameMarker', async (item?: MarkerTreeItem) => {
-    const folder = await ensureValidWorkspace();
     item = item instanceof MarkerTreeItem ? item : asMarker(sidebar.getSelection());
-    if (!folder || !item) {
+    if (!item) {
+      return;
+    }
+
+    const manager = managerForGroup(item.groupId);
+    if (!manager) {
       return;
     }
 
@@ -818,17 +1024,21 @@ export function registerCommands(
   });
 
   register('tabGroups.prevCursor', async () => {
-    await jumpMarker(manager, 'prev');
+    await jumpMarker(workspace, 'prev');
   });
 
   register('tabGroups.nextCursor', async () => {
-    await jumpMarker(manager, 'next');
+    await jumpMarker(workspace, 'next');
   });
 
   register('tabGroups.removeFile', async (item?: FileTreeItem) => {
-    const folder = await ensureValidWorkspace();
     item = resolveFileItem(item, sidebar);
-    if (!folder || !item) {
+    if (!item) {
+      return;
+    }
+
+    const manager = managerForGroup(item.groupId);
+    if (!manager) {
       return;
     }
 
@@ -838,9 +1048,8 @@ export function registerCommands(
   });
 
   register('tabGroups.copyPath', async (item?: FileTreeItem) => {
-    const folder = await ensureValidWorkspace();
     item = resolveFileItem(item, sidebar);
-    if (!folder || !item) {
+    if (!item) {
       return;
     }
 
@@ -849,9 +1058,13 @@ export function registerCommands(
   });
 
   register('tabGroups.renameFile', async (item?: FileTreeItem) => {
-    const folder = await ensureValidWorkspace();
     item = resolveFileItem(item, sidebar);
-    if (!folder || !item) {
+    if (!item) {
+      return;
+    }
+
+    const manager = managerForGroup(item.groupId);
+    if (!manager) {
       return;
     }
 
@@ -888,8 +1101,7 @@ export function registerCommands(
   });
 
   register('tabGroups.addToGroup', async (uri?: vscode.Uri) => {
-    const folder = await ensureValidWorkspace();
-    if (!folder) {
+    if (!(await requireFolders())) {
       return;
     }
 
@@ -899,8 +1111,9 @@ export function registerCommands(
       return;
     }
 
+    const manager = workspace.findManagerByUri(targetUri);
     const relativePath = toRelativePath(targetUri);
-    if (!relativePath) {
+    if (!manager || !relativePath) {
       await vscode.window.showWarningMessage('只能将工作区内的文件加入分组。');
       return;
     }
@@ -932,8 +1145,7 @@ export function registerCommands(
   });
 
   register('tabGroups.removeFromGroup', async (uri?: vscode.Uri) => {
-    const folder = await ensureValidWorkspace();
-    if (!folder) {
+    if (!(await requireFolders())) {
       return;
     }
 
@@ -943,8 +1155,9 @@ export function registerCommands(
       return;
     }
 
+    const manager = workspace.findManagerByUri(targetUri);
     const relativePath = toRelativePath(targetUri);
-    if (!relativePath) {
+    if (!manager || !relativePath) {
       await vscode.window.showWarningMessage('只能操作工作区内的文件。');
       return;
     }
@@ -1004,15 +1217,22 @@ interface AddMarkerTarget {
 
 async function resolveAddMarkerTarget(
   item: FileTreeItem | undefined,
-  manager: TabGroupsManager,
+  workspace: TabGroupsWorkspace,
   sidebar: TabGroupsSearchViewProvider,
-): Promise<AddMarkerTarget | undefined> {
+): Promise<{ target: AddMarkerTarget; manager: TabGroupsManager } | undefined> {
   const fileItem = resolveFileItem(item, sidebar);
   if (fileItem) {
+    const manager = workspace.findManagerByGroupId(fileItem.groupId);
+    if (!manager) {
+      return undefined;
+    }
     return {
-      groupId: fileItem.groupId,
-      relativePath: fileItem.relativePath,
-      alias: fileItem.fileEntry.alias,
+      manager,
+      target: {
+        groupId: fileItem.groupId,
+        relativePath: fileItem.relativePath,
+        alias: fileItem.fileEntry.alias,
+      },
     };
   }
 
@@ -1022,8 +1242,9 @@ async function resolveAddMarkerTarget(
     return undefined;
   }
 
+  const manager = workspace.findManagerByUri(targetUri);
   const relativePath = toRelativePath(targetUri);
-  if (!relativePath) {
+  if (!manager || !relativePath) {
     await vscode.window.showWarningMessage('只能为工作区内的文件添加标记。');
     return undefined;
   }
@@ -1037,9 +1258,12 @@ async function resolveAddMarkerTarget(
   if (groups.length === 1) {
     const entry = manager.getFileEntry(groups[0].id, relativePath);
     return {
-      groupId: groups[0].id,
-      relativePath,
-      alias: entry?.alias ?? relativePath.split('/').pop() ?? relativePath,
+      manager,
+      target: {
+        groupId: groups[0].id,
+        relativePath,
+        alias: entry?.alias ?? relativePath.split('/').pop() ?? relativePath,
+      },
     };
   }
 
@@ -1056,9 +1280,12 @@ async function resolveAddMarkerTarget(
 
   const entry = manager.getFileEntry(picked.groupId, relativePath);
   return {
-    groupId: picked.groupId,
-    relativePath,
-    alias: entry?.alias ?? relativePath.split('/').pop() ?? relativePath,
+    manager,
+    target: {
+      groupId: picked.groupId,
+      relativePath,
+      alias: entry?.alias ?? relativePath.split('/').pop() ?? relativePath,
+    },
   };
 }
 
@@ -1080,20 +1307,16 @@ function asMarker(item: TreeElement | undefined): MarkerTreeItem | undefined {
   return item instanceof MarkerTreeItem ? item : undefined;
 }
 
-async function jumpMarker(manager: TabGroupsManager, direction: 'prev' | 'next'): Promise<void> {
-  const folder = await ensureValidWorkspace();
-  if (!folder) {
-    return;
-  }
-
+async function jumpMarker(workspace: TabGroupsWorkspace, direction: 'prev' | 'next'): Promise<void> {
   const editor = vscode.window.activeTextEditor;
   if (!editor) {
     await vscode.window.showWarningMessage('请先在编辑器中打开文件。');
     return;
   }
 
+  const manager = workspace.findManagerByUri(editor.document.uri);
   const relativePath = toRelativePath(editor.document.uri);
-  if (!relativePath) {
+  if (!manager || !relativePath) {
     await vscode.window.showWarningMessage('只能在工作区内的文件中跳转标记。');
     return;
   }

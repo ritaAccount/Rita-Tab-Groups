@@ -1,7 +1,8 @@
 # Changelog
 
 用户可见的 Marketplace 版本变更。决策细节见 [`developer-record.md`](./developer-record.md)。  
-版本号以 `package.json` 为准，由维护者发版时 bump；贡献者 PR 默认不改 version。
+版本号以 `package.json` 为准，由维护者发版时 bump；贡献者 PR 默认不改 version。  
+某次发版当时捆的配置 schema / Skill 见 [`version/releases.json`](./version/releases.json)。
 
 ## Unreleased
 

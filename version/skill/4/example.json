@@ -1,0 +1,5 @@
+{
+  "format": "skill",
+  "target": ".cursor/skills/tab-groups/SKILL.md",
+  "file": "example.SKILL.md"
+}

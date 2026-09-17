@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
-import { getWorkspaceFolder, toRelativePath } from './workspaceUtils';
+import { getWorkspaceFolders, toRelativePath } from './workspaceUtils';
 import { parseGitStatusPorcelain } from './workingSetParseUtils';
 import {
   GitRepoInfo,
@@ -22,9 +22,12 @@ export { discoverGitRepos, mapRepoPathToWorkspace, getGitBranchAt } from './gitR
 const execFileAsync = promisify(execFile);
 
 /**
- * 收集当前编辑器中已打开、且属于本工作区的文件相对路径（去重，保持打开顺序）。
+ * 收集当前编辑器中已打开、且属于指定根（或全部根）的文件相对路径。
+ * 返回路径相对**各自所属根**；调用方应只把同一根的路径交给对应 manager。
  */
-export function collectOpenEditorRelativePaths(): string[] {
+export function collectOpenEditorRelativePaths(
+  folder?: vscode.WorkspaceFolder,
+): string[] {
   const seen = new Set<string>();
   const paths: string[] = [];
 
@@ -34,7 +37,7 @@ export function collectOpenEditorRelativePaths(): string[] {
       if (!uri || uri.scheme !== 'file') {
         continue;
       }
-      const relative = toRelativePath(uri);
+      const relative = toRelativePath(uri, folder);
       if (!relative || seen.has(relative)) {
         continue;
       }
@@ -44,6 +47,18 @@ export function collectOpenEditorRelativePaths(): string[] {
   }
 
   return paths;
+}
+
+/** 按工作区根分组收集已打开文件。 */
+export function collectOpenEditorPathsByFolder(): Map<vscode.WorkspaceFolder, string[]> {
+  const result = new Map<vscode.WorkspaceFolder, string[]>();
+  for (const folder of getWorkspaceFolders()) {
+    const paths = collectOpenEditorRelativePaths(folder);
+    if (paths.length > 0) {
+      result.set(folder, paths);
+    }
+  }
+  return result;
 }
 
 function resolveTabFileUri(tab: vscode.Tab): vscode.Uri | undefined {
@@ -65,15 +80,12 @@ export type GitChangesCollectResult =
   | { ok: false; reason: 'no-workspace' | 'no-repos' | 'no-changes' | 'cancelled' };
 
 /**
- * 发现仓库 →（多个则让用户多选）→ 收集变更路径（相对工作区根）。
+ * 发现仓库 →（多个则让用户多选）→ 收集变更路径（相对指定工作区根）。
  */
-export async function collectGitChangesWithRepoPick(): Promise<GitChangesCollectResult> {
-  const folder = getWorkspaceFolder();
-  if (!folder) {
-    return { ok: false, reason: 'no-workspace' };
-  }
-
-  const repos = await discoverGitRepos();
+export async function collectGitChangesWithRepoPick(
+  folder: vscode.WorkspaceFolder,
+): Promise<GitChangesCollectResult> {
+  const repos = await discoverGitRepos(folder);
   if (repos.length === 0) {
     return { ok: false, reason: 'no-repos' };
   }
@@ -97,7 +109,7 @@ export async function collectGitChangesWithRepoPick(): Promise<GitChangesCollect
     selected = picked.map((item) => item.repo);
   }
 
-  const paths = await collectGitChangedRelativePathsFromRepos(selected);
+  const paths = await collectGitChangedRelativePathsFromRepos(folder, selected);
   if (paths.length === 0) {
     return { ok: false, reason: 'no-changes' };
   }
@@ -107,10 +119,10 @@ export async function collectGitChangesWithRepoPick(): Promise<GitChangesCollect
 
 /** 从指定仓库列表收集变更，路径统一为相对工作区根 */
 export async function collectGitChangedRelativePathsFromRepos(
+  folder: vscode.WorkspaceFolder,
   repos: GitRepoInfo[],
 ): Promise<string[]> {
-  const folder = getWorkspaceFolder();
-  if (!folder || repos.length === 0) {
+  if (repos.length === 0) {
     return [];
   }
 
@@ -141,7 +153,7 @@ export async function collectGitChangedRelativePathsFromRepos(
         repo.relativeToWorkspace,
       );
       const uri = vscode.Uri.joinPath(folder.uri, workspaceRelative);
-      const relative = toRelativePath(uri);
+      const relative = toRelativePath(uri, folder);
       if (!relative || seen.has(relative)) {
         continue;
       }
@@ -154,15 +166,12 @@ export async function collectGitChangedRelativePathsFromRepos(
 }
 
 /** @deprecated 兼容旧调用：无交互，仅工作区根仓库 */
-export async function collectGitChangedRelativePaths(): Promise<string[]> {
-  const folder = getWorkspaceFolder();
-  if (!folder) {
-    return [];
-  }
-  const repos = await discoverGitRepos();
+export async function collectGitChangedRelativePaths(
+  folder: vscode.WorkspaceFolder,
+): Promise<string[]> {
+  const repos = await discoverGitRepos(folder);
   if (repos.length === 0) {
     return [];
   }
-  // 无 UI 时：若只有根仓库用根；多个则全部合并（避免静默丢嵌套）
-  return collectGitChangedRelativePathsFromRepos(repos);
+  return collectGitChangedRelativePathsFromRepos(folder, repos);
 }

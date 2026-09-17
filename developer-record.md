@@ -659,3 +659,61 @@ media/shortcuts.js        # 按键捕获逻辑
 
 
 
+## 多根工作区（2026-09）
+
+| 项 | 决策 |
+|----|------|
+| 配置 | 每个 `WorkspaceFolder` 各自 `.vscode/tab-groups.json`；路径仍相对本根；**不升** `CONFIG_VERSION` |
+| 树 UI | 多根顶层按文件夹分区（scope）；单根不额外加层 |
+| 操作 | 按文件 uri / 选中 scope 归属目标根；禁止跨根拖放分组/文件 |
+| when | `workspaceFolderCount >= 1` |
+| Skill | `AI_GUIDE_VERSION` → 4；每根各写一份 Skill |
+
+**涉及**：`workspaceUtils`、`tabGroupsWorkspace`、`tabGroupsManager`、`treeProvider`、`commands`、`extension`、`package.json`、`version/skill/4/`
+
+
+
+## 分组颜色 / 图标（2026-09）
+
+| 项 | 决策 |
+|----|------|
+| schema | `CONFIG_VERSION` → `1.6.0`；`Group.color` / `Group.icon` 可选 |
+| 色板 | 固定 id：red/orange/yellow/green/teal/blue/purple/pink/gray |
+| 图标 | Codicon 白名单（folder/bookmark/star/bug/…），非任意字符串 |
+| UI | 分组右键「设置分组颜色 / 图标」；侧边栏 Codicon 着色 |
+| Skill | `AI_GUIDE_VERSION` → 5 |
+
+**涉及**：`groupAppearanceUtils`、`types`、`tabGroupsManager`、`treeProvider`、`commands`、`package.json`、`version/tab-groups/1.6.0/`、`version/skill/5/`
+
+## 分组颜色 / 图标快捷键（2026-09）
+
+| 项 | 决策 |
+|----|------|
+| 配置项 | `tabGroups.shortcuts.setGroupColor` / `setGroupIcon` |
+| 默认 | `ctrl+alt+c` / `ctrl+alt+i`；设置页可改并同步 keybindings |
+| when | `workspaceFolderCount >= 1`；需先在侧边栏选中分组 |
+
+**涉及**：`types`、`shortcutUtils`、`settingsWebview`、`shortcuts.js`、`package.json`
+
+## 快捷键可清空（2026-09）
+
+| 项 | 决策 |
+|----|------|
+| 空字符串 | 表示不绑定；不会被 ensure 当成缺失而写回默认 |
+| 同步 | 空值向 keybindings 写入 `-command`，覆盖 package.json 默认键 |
+| UI | 设置页 Backspace/Delete 清除，显示「未设置」 |
+
+**涉及**：`shortcutUtils`、`shortcuts.js` / `.css`、`settingsWebview`、`developer-readme`
+
+---
+
+### `version/releases.json`：发版 ↔ schema 对照（2026-09-17）
+
+| 项 | 决策 |
+|----|------|
+| 问题 | 仅有 schema 目录无法对应「某次 Marketplace 发版当时的结构」，回滚难查 |
+| 做法 | 新增 `version/releases.json`：`extension` → `configVersion` + `skillVersion`；只追加 |
+| 写入 | 维护者发版脚本在 publish **成功后**自动追加；查阅见 `version/explain.md` |
+
+**涉及文件**：`version/releases.json`、`version/explain.md`、`CONTRIBUTING.md`、`CHANGELOG.md`、仓外发版脚本
+

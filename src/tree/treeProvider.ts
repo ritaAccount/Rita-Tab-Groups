@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { FileMarkerType, FlatFileMarker, Group, GroupFileEntry } from '../data/types';
 import { TabGroupsManager } from '../data/tabGroupsManager';
+import { TabGroupsWorkspace } from '../data/tabGroupsWorkspace';
 import {
   countMarkers,
   formatFileEntryDescription,
@@ -19,21 +20,30 @@ import {
   buildTreeSearchIndex,
 } from './searchFilter';
 import { fileExistenceCache } from '../workspace/fileExistenceCache';
-import { isValidWorkspace, toAbsoluteUri } from '../workspace/workspaceUtils';
+import { isMultiRootWorkspace, isValidWorkspace, toAbsoluteUri } from '../workspace/workspaceUtils';
+import {
+  groupColorHex,
+  resolveGroupIconId,
+} from '../data/groupAppearanceUtils';
 
 /** 树中标记类型组的固定顺序 */
 const MARKER_TYPE_ORDER: FileMarkerType[] = ['cursor', 'function', 'text'];
 
-export type TreeElement = GroupTreeItem | FileTreeItem | MarkerTypeTreeItem | MarkerTreeItem;
+export type TreeElement =
+  | WorkspaceFolderTreeItem
+  | GroupTreeItem
+  | FileTreeItem
+  | MarkerTypeTreeItem
+  | MarkerTreeItem;
 
 export type SidebarIcon =
-  | { kind: 'codicon'; id: string }
+  | { kind: 'codicon'; id: string; color?: string }
   | { kind: 'font'; fontId: string; character: string; color?: string; size?: string }
   | { kind: 'image'; uri: string };
 
 export interface SidebarTreeNode {
   id: string;
-  kind: 'group' | 'file' | 'markerType' | 'marker';
+  kind: 'workspaceFolder' | 'group' | 'file' | 'markerType' | 'marker';
   label: string;
   description?: string;
   tooltip?: string;
@@ -43,6 +53,7 @@ export interface SidebarTreeNode {
   missing?: boolean;
   groupId?: string;
   filePath?: string;
+  folderUri?: string;
   iconId?: string;
   icon?: SidebarIcon;
   children?: SidebarTreeNode[];
@@ -57,8 +68,21 @@ interface FileDragPayload {
   path: string;
 }
 
+/** 多根工作区顶层：工作区文件夹分区 */
+export class WorkspaceFolderTreeItem extends vscode.TreeItem {
+  constructor(public readonly folder: vscode.WorkspaceFolder) {
+    super(folder.name, vscode.TreeItemCollapsibleState.Expanded);
+    this.contextValue = 'workspaceFolder';
+    this.iconPath = new vscode.ThemeIcon('root-folder');
+    this.id = `workspaceFolder:${folder.uri.toString()}`;
+    this.tooltip = folder.uri.fsPath;
+    this.description = folder.uri.fsPath;
+  }
+}
+
 export class GroupTreeItem extends vscode.TreeItem {
   constructor(
+    public readonly folder: vscode.WorkspaceFolder,
     public readonly group: Group,
     typeLabel: string,
     isRegex: boolean,
@@ -73,7 +97,7 @@ export class GroupTreeItem extends vscode.TreeItem {
       vscode.TreeItemCollapsibleState.Collapsed,
     );
     this.contextValue = isRegex ? 'groupRegex' : 'group';
-    this.iconPath = new vscode.ThemeIcon('folder');
+    this.iconPath = new vscode.ThemeIcon(resolveGroupIconId(group.icon, false));
     this.id = `group:${group.id}`;
     this.tooltip = showOnHover ? `${group.name}${typeLabel}` : group.name;
 
@@ -85,6 +109,7 @@ export class GroupTreeItem extends vscode.TreeItem {
 
 export class FileTreeItem extends vscode.TreeItem {
   constructor(
+    public readonly folder: vscode.WorkspaceFolder,
     public readonly groupId: string,
     public readonly fileEntry: GroupFileEntry,
     exists: boolean,
@@ -104,11 +129,7 @@ export class FileTreeItem extends vscode.TreeItem {
     );
     this.id = buildFileTreeItemId(groupId, fileEntry.path);
     this.tooltip = formatFileEntryTooltip(fileEntry, exists, { showSourceBranch });
-
-    const uri = toAbsoluteUri(fileEntry.path);
-    if (uri) {
-      this.resourceUri = uri;
-    }
+    this.resourceUri = toAbsoluteUri(fileEntry.path, folder);
 
     if (exists) {
       this.command = {
@@ -125,6 +146,7 @@ export class FileTreeItem extends vscode.TreeItem {
 /** 文件下的标记类型组（游标 / 函数 / 匹配） */
 export class MarkerTypeTreeItem extends vscode.TreeItem {
   constructor(
+    public readonly folder: vscode.WorkspaceFolder,
     public readonly groupId: string,
     public readonly relativePath: string,
     public readonly markerType: FileMarkerType,
@@ -141,6 +163,7 @@ export class MarkerTypeTreeItem extends vscode.TreeItem {
 
 export class MarkerTreeItem extends vscode.TreeItem {
   constructor(
+    public readonly folder: vscode.WorkspaceFolder,
     public readonly groupId: string,
     public readonly relativePath: string,
     public readonly marker: FlatFileMarker,
@@ -198,7 +221,7 @@ export class TabGroupsTreeProvider
   private sidebarElements = new Map<string, TreeElement>();
   private searchFilter: TreeSearchFilter | undefined;
 
-  constructor(private readonly manager: TabGroupsManager) {}
+  constructor(private readonly workspace: TabGroupsWorkspace) {}
 
   refresh(): void {
     this.onDidChangeTreeDataEmitter.fire(undefined);
@@ -397,9 +420,22 @@ export class TabGroupsTreeProvider
   }
 
   private async dropGroups(sourceGroupIds: string[], targetGroupId: string): Promise<void> {
+    const manager = this.workspace.findManagerByGroupId(targetGroupId);
+    if (!manager) {
+      return;
+    }
+
+    for (const groupId of sourceGroupIds) {
+      const sourceManager = this.workspace.findManagerByGroupId(groupId);
+      if (!sourceManager || sourceManager !== manager) {
+        vscode.window.setStatusBarMessage('不能跨工作区文件夹移动分组', 3000);
+        return;
+      }
+    }
+
     let moved = 0;
     for (const groupId of sourceGroupIds) {
-      const success = await this.manager.moveGroupToParent(groupId, targetGroupId);
+      const success = await manager.moveGroupToParent(groupId, targetGroupId);
       if (success) {
         moved++;
       }
@@ -413,14 +449,27 @@ export class TabGroupsTreeProvider
     this.refresh();
     const sourceLabel =
       moved === 1
-        ? this.manager.getGroupPathLabel(sourceGroupIds[0])
+        ? manager.getGroupPathLabel(sourceGroupIds[0])
         : `${moved} 个分组`;
-    const targetLabel = this.manager.getGroupPathLabel(targetGroupId);
+    const targetLabel = manager.getGroupPathLabel(targetGroupId);
     vscode.window.setStatusBarMessage(`已将分组「${sourceLabel}」移动到「${targetLabel}」下`, 3000);
   }
 
   private async dropFiles(payloads: FileDragPayload[], targetGroupId: string): Promise<void> {
-    const moved = await this.manager.moveFilesToGroup(
+    const manager = this.workspace.findManagerByGroupId(targetGroupId);
+    if (!manager) {
+      return;
+    }
+
+    for (const payload of payloads) {
+      const sourceManager = this.workspace.findManagerByGroupId(payload.groupId);
+      if (!sourceManager || sourceManager !== manager) {
+        vscode.window.setStatusBarMessage('不能跨工作区文件夹移动文件', 3000);
+        return;
+      }
+    }
+
+    const moved = await manager.moveFilesToGroup(
       payloads.map((payload) => ({
         sourceGroupId: payload.groupId,
         filePath: payload.path,
@@ -434,22 +483,28 @@ export class TabGroupsTreeProvider
     }
 
     this.refresh();
-    const targetLabel = this.manager.getGroupPathLabel(targetGroupId);
+    const targetLabel = manager.getGroupPathLabel(targetGroupId);
     vscode.window.setStatusBarMessage(`已将 ${moved} 个文件移动到「${targetLabel}」`, 3000);
   }
 
   getParent(element: TreeElement): TreeElement | undefined {
+    if (element instanceof WorkspaceFolderTreeItem) {
+      return undefined;
+    }
+
     if (element instanceof MarkerTreeItem) {
-      const entry = this.manager.getFileEntry(element.groupId, element.relativePath);
+      const manager = this.workspace.findManagerByGroupId(element.groupId);
+      const entry = manager?.getFileEntry(element.groupId, element.relativePath);
       if (!entry) {
         return undefined;
       }
       const group = (entry.markers ?? []).find((item) => item.type === element.marker.type);
       const count = group?.content.length ?? 0;
       if (count === 0) {
-        return new FileTreeItem(element.groupId, entry, true);
+        return new FileTreeItem(element.folder, element.groupId, entry, true);
       }
       return new MarkerTypeTreeItem(
+        element.folder,
         element.groupId,
         element.relativePath,
         element.marker.type,
@@ -458,20 +513,25 @@ export class TabGroupsTreeProvider
     }
 
     if (element instanceof MarkerTypeTreeItem) {
-      const entry = this.manager.getFileEntry(element.groupId, element.relativePath);
+      const manager = this.workspace.findManagerByGroupId(element.groupId);
+      const entry = manager?.getFileEntry(element.groupId, element.relativePath);
       if (!entry) {
         return undefined;
       }
-      return new FileTreeItem(element.groupId, entry, true);
+      return new FileTreeItem(element.folder, element.groupId, entry, true);
     }
 
     if (element instanceof FileTreeItem) {
       return this.getGroupTreeItem(element.groupId);
     }
 
-    const parentId = this.manager.getParentGroupId(element.group.id);
+    const manager = this.workspace.findManagerByGroupId(element.group.id);
+    const parentId = manager?.getParentGroupId(element.group.id);
     if (parentId) {
       return this.getGroupTreeItem(parentId);
+    }
+    if (isMultiRootWorkspace()) {
+      return new WorkspaceFolderTreeItem(element.folder);
     }
     return undefined;
   }
@@ -484,17 +544,33 @@ export class TabGroupsTreeProvider
     const index = this.getSearchIndex();
 
     if (!element) {
-      return this.manager
-        .getRootGroups()
-        .filter((group) => !index || index.groupIds.has(group.id))
-        .map((group) => this.createGroupTreeItem(group, index));
+      const managers = this.workspace.getManagers();
+      if (managers.length === 0) {
+        return [];
+      }
+      if (managers.length === 1) {
+        return this.rootGroupItems(managers[0], index);
+      }
+      return managers.map((manager) => new WorkspaceFolderTreeItem(manager.folder));
+    }
+
+    if (element instanceof WorkspaceFolderTreeItem) {
+      const manager = this.workspace.getManager(element.folder);
+      if (!manager) {
+        return [];
+      }
+      return this.rootGroupItems(manager, index);
     }
 
     if (element instanceof GroupTreeItem) {
-      const childGroups = this.manager
+      const manager = this.workspace.findManagerByGroupId(element.group.id);
+      if (!manager) {
+        return [];
+      }
+      const childGroups = manager
         .getChildGroups(element.group.id)
         .filter((group) => !index || index.groupIds.has(group.id))
-        .map((group) => this.createGroupTreeItem(group, index));
+        .map((group) => this.createGroupTreeItem(manager, group, index));
       const files = element.group.files.filter((fileEntry) => {
         if (!index) {
           return true;
@@ -503,8 +579,8 @@ export class TabGroupsTreeProvider
       });
       const fileItems = await Promise.all(
         files.map(async (fileEntry) => {
-          const exists = await fileExistenceCache.exists(fileEntry.path);
-          return new FileTreeItem(element.group.id, fileEntry, exists);
+          const exists = await fileExistenceCache.exists(element.folder, fileEntry.path);
+          return new FileTreeItem(element.folder, element.group.id, fileEntry, exists);
         }),
       );
 
@@ -525,12 +601,19 @@ export class TabGroupsTreeProvider
       });
       return types.map(
         ({ type, count }) =>
-          new MarkerTypeTreeItem(element.groupId, element.relativePath, type, count),
+          new MarkerTypeTreeItem(
+            element.folder,
+            element.groupId,
+            element.relativePath,
+            type,
+            count,
+          ),
       );
     }
 
     if (element instanceof MarkerTypeTreeItem) {
-      const entry = this.manager.getFileEntry(element.groupId, element.relativePath);
+      const manager = this.workspace.findManagerByGroupId(element.groupId);
+      const entry = manager?.getFileEntry(element.groupId, element.relativePath);
       const group = (entry?.markers ?? []).find((item) => item.type === element.markerType);
       if (!group) {
         return [];
@@ -555,7 +638,7 @@ export class TabGroupsTreeProvider
         })
         .map(
           ({ item, contentIndex }) =>
-            new MarkerTreeItem(element.groupId, element.relativePath, {
+            new MarkerTreeItem(element.folder, element.groupId, element.relativePath, {
               type: element.markerType,
               contentIndex,
               item,
@@ -567,28 +650,44 @@ export class TabGroupsTreeProvider
   }
 
   getGroupTreeItem(groupId: string): GroupTreeItem | undefined {
-    const group = this.manager.getGroup(groupId);
-    if (!group) {
+    const manager = this.workspace.findManagerByGroupId(groupId);
+    const group = manager?.getGroup(groupId);
+    if (!manager || !group) {
       return undefined;
     }
-    return this.createGroupTreeItem(group, this.getSearchIndex());
+    return this.createGroupTreeItem(manager, group, this.getSearchIndex());
+  }
+
+  private rootGroupItems(
+    manager: TabGroupsManager,
+    index?: TreeSearchIndex,
+  ): GroupTreeItem[] {
+    return manager
+      .getRootGroups()
+      .filter((group) => !index || index.groupIds.has(group.id))
+      .map((group) => this.createGroupTreeItem(manager, group, index));
   }
 
   private getSearchIndex(): TreeSearchIndex | undefined {
     if (!this.searchFilter) {
       return undefined;
     }
-    return buildTreeSearchIndex(this.manager.getGroups(), this.searchFilter);
+    const allGroups = this.workspace.getManagers().flatMap((manager) => manager.getGroups());
+    return buildTreeSearchIndex(allGroups, this.searchFilter);
   }
 
-  private createGroupTreeItem(group: Group, index?: TreeSearchIndex): GroupTreeItem {
-    const suffix = this.manager.getGroupLabelSuffix(group);
-    const isRegex = this.manager.isRegexGroup(group);
+  private createGroupTreeItem(
+    manager: TabGroupsManager,
+    group: Group,
+    index?: TreeSearchIndex,
+  ): GroupTreeItem {
+    const suffix = manager.getGroupLabelSuffix(group);
+    const isRegex = manager.isRegexGroup(group);
     const hasChildren = index
-      ? this.manager.getChildGroups(group.id).some((child) => index.groupIds.has(child.id)) ||
+      ? manager.getChildGroups(group.id).some((child) => index.groupIds.has(child.id)) ||
         group.files.some((file) => index.fileKeys.has(buildFileSearchKey(group.id, file.path)))
       : group.children.length > 0 || group.files.length > 0;
-    const item = new GroupTreeItem(group, suffix, isRegex, hasChildren);
+    const item = new GroupTreeItem(manager.folder, group, suffix, isRegex, hasChildren);
 
     const shouldExpand =
       (index?.expandGroupIds.has(group.id) ?? false) || this.expandedGroupIds.has(group.id);
@@ -623,7 +722,9 @@ export class TabGroupsTreeProvider
       missing: element instanceof FileTreeItem && element.contextValue === 'missingFile',
       groupId: sidebarGroupId(element),
       filePath: sidebarFilePath(element),
+      folderUri: sidebarFolderUri(element),
       iconId: sidebarIconId(element, collapsible && expanded),
+      icon: sidebarGroupIcon(element, collapsible && expanded),
     };
 
     if (node.expanded) {
@@ -636,6 +737,9 @@ export class TabGroupsTreeProvider
 }
 
 function sidebarKind(element: TreeElement): SidebarTreeNode['kind'] {
+  if (element instanceof WorkspaceFolderTreeItem) {
+    return 'workspaceFolder';
+  }
   if (element instanceof GroupTreeItem) {
     return 'group';
   }
@@ -672,9 +776,27 @@ function sidebarFilePath(element: TreeElement): string | undefined {
   return undefined;
 }
 
+function sidebarFolderUri(element: TreeElement): string | undefined {
+  if (element instanceof WorkspaceFolderTreeItem) {
+    return element.folder.uri.toString();
+  }
+  if (
+    element instanceof GroupTreeItem ||
+    element instanceof FileTreeItem ||
+    element instanceof MarkerTypeTreeItem ||
+    element instanceof MarkerTreeItem
+  ) {
+    return element.folder.uri.toString();
+  }
+  return undefined;
+}
+
 function sidebarIconId(element: TreeElement, expanded: boolean): string {
+  if (element instanceof WorkspaceFolderTreeItem) {
+    return expanded ? 'root-folder-opened' : 'root-folder';
+  }
   if (element instanceof GroupTreeItem) {
-    return expanded ? 'folder-opened' : 'folder';
+    return resolveGroupIconId(element.group.icon, expanded);
   }
   if (element instanceof FileTreeItem) {
     return 'file';
@@ -686,6 +808,15 @@ function sidebarIconId(element: TreeElement, expanded: boolean): string {
     return markerTypeIcon(element.markerType);
   }
   return 'file';
+}
+
+function sidebarGroupIcon(element: TreeElement, expanded: boolean): SidebarIcon | undefined {
+  if (!(element instanceof GroupTreeItem)) {
+    return undefined;
+  }
+  const id = resolveGroupIconId(element.group.icon, expanded);
+  const color = groupColorHex(element.group.color);
+  return color ? { kind: 'codicon', id, color } : { kind: 'codicon', id };
 }
 
 export function buildFileTreeItemId(groupId: string, relativePath: string): string {

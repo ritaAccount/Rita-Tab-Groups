@@ -43,6 +43,11 @@ h1 {
   box-shadow: 0 0 0 1px var(--vscode-focusBorder);
 }
 
+.shortcut-button.unset {
+  font-style: italic;
+  color: var(--vscode-descriptionForeground);
+}
+
 .status {
   min-height: 20px;
   margin: 8px 0 16px;

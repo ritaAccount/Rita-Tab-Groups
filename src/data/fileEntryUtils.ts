@@ -7,7 +7,7 @@ import {
   GroupFileEntry,
 } from './types';
 
-export const CONFIG_VERSION = '1.5.0';
+export const CONFIG_VERSION = '1.6.0';
 
 export function defaultAliasFromPath(relativePath: string): string {
   return relativePath.split('/').pop() ?? relativePath;

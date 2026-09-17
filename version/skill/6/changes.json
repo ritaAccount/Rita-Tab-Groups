@@ -1,0 +1,10 @@
+{
+  "version": 6,
+  "kind": "skill",
+  "from": 5,
+  "summary": "快捷键增加设置分组颜色 / 图标",
+  "changes": [
+    "tabGroups.shortcuts 增加 setGroupColor（默认 ctrl+alt+c）与 setGroupIcon（默认 ctrl+alt+i）"
+  ],
+  "targets": [".cursor/skills/tab-groups/SKILL.md"]
+}

@@ -77,6 +77,8 @@ interface Group {
   files: GroupFileEntry[];
   config?: InlineConfig;   // 优先于 configId
   configId?: string;
+  color?: string;          // 可选：预设色板 id（red/orange/…/gray）
+  icon?: string;           // 可选：Codicon 白名单（folder/bookmark/star/…）
 }
 
 interface TabGroupsData {
@@ -92,7 +94,7 @@ interface TabGroupsData {
 - 否则如果 `group.configId` 存在 → 在 `configs` 中查找匹配的全局配置
 - 否则 → 视为 `{ type: "manual" }`（默认手动分组）
 
-**路径存储**：`files[].path` 使用相对于工作区根目录的路径（例如 `src/index.ts`），保证跨平台和可移植性。
+**路径存储**：`files[].path` 使用相对于**所属工作区根**的路径（例如 `src/index.ts`）。多根时每个根各有一份配置，路径不带根名；保证跨平台和可移植性。
 
 完整示例见 [`example/`](./example/) 与 [`version/tab-groups/`](./version/tab-groups/)。
 
@@ -111,13 +113,16 @@ interface ShortcutSettings {
   addText: string;         // 「添加字符匹配」，默认 ctrl+shift+'
   prevCursor: string;      // 「上一标记」，默认 ctrl+shift+[
   nextCursor: string;      // 「下一标记」，默认 ctrl+shift+]
+  setGroupColor: string;   // 「设置分组颜色」，默认 ctrl+alt+c（需先选中分组）
+  setGroupIcon: string;    // 「设置分组图标」，默认 ctrl+alt+i（需先选中分组）
 }
 ```
 
 **解析与同步规则**：
 
-- 激活扩展时，若工作区无 `tabGroups.shortcuts`，写入 `DEFAULT_SHORTCUTS` 至 `.vscode/settings.json`
-- 保存自定义快捷键时，校验格式后更新工作区配置，并**同步至用户** `keybindings.json`（VS Code 不支持工作区级 keybindings 文件）
+- 激活扩展时，若工作区缺少某条 `tabGroups.shortcuts` 字段，用默认值补全；**已写成 `""` 的表示不绑定**，不会被改回默认
+- 保存时：有键则写入 keybindings；为空则写入 `-command` 覆盖扩展默认键
+- 设置页录入时可用 Backspace / Delete 清除
 - 实际生效的按键绑定在用户 keybindings 中；工作区 settings 为配置来源，可随项目提交
 
 ### 2.2 节点搜索配置
@@ -162,9 +167,9 @@ interface SearchSettings {
 
 **侧边栏标题栏（view/title）**：
 
-- 新建分组（需单根工作区，创建**根级**分组）
-- **设置**（始终显示，无工作区限制；打开设置页，含「通用」「快捷键」；保存快捷键/打开配置文件时需单根工作区）
-- 标题 `…` 菜单（`1_workspace`）：**从打开的标签创建分组** / **将打开的标签加入分组** / **从 Git 变更创建分组**
+- 新建分组（需已打开工作区；多根时先选目标文件夹，或在 scope 行上新建；创建**根级**分组）
+- **设置**（始终显示，无工作区限制；打开设置页，含「通用」「快捷键」；保存快捷键/打开配置文件时需已打开工作区）
+- 标题 `…` 菜单（`1_workspace`）：**从打开的标签创建分组** / **将打开的标签加入分组** / **从 Git 变更创建分组**（多根时先选目标文件夹）
 
 **节点搜索**（与分组列表同在 `tabGroupsView` Webview 内，位于标题下方）：
 
@@ -186,6 +191,7 @@ interface SearchSettings {
 
 - 删除分组
 - 重命名分组
+- **设置分组颜色** / **设置分组图标**（预设色板 + Codicon 白名单）
 - **新建子分组**
 - **展开分组**（打开组内所有文件）：一键在编辑器中打开该分组 `files` 中的全部文件；不存在的文件跳过；最后一个文件获得焦点
 - **折叠分组**（关闭组内所有文件）：一键关闭编辑器中属于该分组的所有已打开标签页
@@ -235,7 +241,7 @@ interface SearchSettings {
 - **快捷键** 分类：展示可绑定命令及当前快捷键；点击快捷键框后**按键捕获**录入新组合
 - **保存**：显示配置自动写入；快捷键需点保存写入 `tabGroups.shortcuts` 并同步 keybindings
 - **恢复默认**：显示页立即恢复并保存；快捷键页仅预览，需点保存
-- 无单根工作区时可打开面板预览，但无法保存快捷键 / 显示配置 / 打开配置文件 / 升级配置 / 导入导出
+- 无工作区时可打开面板预览，但无法保存快捷键 / 显示配置 / 打开配置文件 / 升级配置 / 导入导出
 - 三页统一 Setting Row（左标题说明、右控件；内容区 max-width）
 
 **默认快捷键**：
@@ -325,10 +331,10 @@ interface SearchSettings {
 | -------------- | ------------------------------------------------------------------------------------------------------------ |
 | 打开设置页          | `tabGroups.openSettings`，左分类右内容；默认选中「通用」                                                                     |
 | 导出 / 导入配置     | `tabGroups.exportConfig` / `tabGroups.importConfig`；分组右键 `tabGroups.exportGroup`                                      |
-| 录入快捷键          | Webview 内按键捕获，格式校验（修饰键 + 主键）                                                                                 |
+| 录入快捷键          | Webview 内按键捕获；Backspace/Delete 清除为不绑定；非空须修饰键+主键 |
 | 保存             | `workspace.getConfiguration().update('tabGroups.shortcuts', …, Workspace)` + `syncKeybindingsFromSettings()` |
-| 激活时初始化         | `ensureWorkspaceShortcutSettings()`：补全缺失的工作区配置项                                                              |
-| keybindings 同步 | 读取用户 keybindings.json（JSONC 解析），移除本扩展五条旧绑定，写入新绑定                                                             |
+| 激活时初始化         | `ensureWorkspaceShortcutSettings()`：仅补全**缺失字段**；已有 `""` 保留 |
+| keybindings 同步 | 移除本扩展托管命令（含 `-command`），再写入绑定；空值写 `-command` 覆盖 package 默认键 |
 | 冲突检测           | 不做（v2 定稿）                                                                                                    |
 
 
@@ -369,7 +375,7 @@ interface SearchSettings {
 | 从打开的标签创建 | 命令面板或侧边栏 `…` → 收集已打开工作区文件 → 输入名称（默认带时间）→ 新建手动分组 |
 | 将打开的标签加入 | 选择已有分组，批量加入；路径已存在则跳过 |
 | 从 Git 变更创建 | `git status --porcelain`（含未跟踪）；支持嵌套多仓库选择；默认名带当前分支 |
-| 过滤 | 仅 `file` scheme 且落在单根工作区内；Diff 取 modified；Notebook 计入 |
+| 过滤 | 仅 `file` scheme 且落在目标工作区根内；Diff 取 modified；Notebook 计入 |
 
 **实现文件**：`src/workspace/workingSetUtils.ts`、`workingSetParseUtils.ts`、`src/data/tabGroupsManager.ts`（`addFilesToGroup`）、`src/tree/commands.ts`
 
@@ -444,6 +450,8 @@ src/
 ├── data/                        # 分组数据与持久化
 │   ├── types.ts
 │   ├── tabGroupsManager.ts
+│   ├── tabGroupsWorkspace.ts
+│   ├── groupAppearanceUtils.ts
 │   ├── fileEntryUtils.ts        # CONFIG_VERSION、别名与 markers / branch 迁移
 │   ├── groupHierarchyUtils.ts
 │   └── importExportUtils.ts     # 导出打包 / 导入合并与替换
@@ -538,7 +546,7 @@ version/                         # 版本信息（不参与运行时）；约定
 
 ### 阶段 6：错误处理与优化
 
-- [x] 工作区未打开或多根时禁用功能并提示
+- [x] 工作区未打开时禁用功能并提示；多根按文件夹分区启用
 - [x] JSON 解析失败时的回退与提示
 - [x] 文件路径不存在时在树视图中灰显，且可右键移除
 - [x] 添加状态栏消息提示成功/失败
@@ -572,14 +580,14 @@ version/                         # 版本信息（不参与运行时）；约定
 
 ## 8. 边界情况与注意事项
 
-1. **多根工作区**：MVP 仅支持**单根工作区**；无工作区或多根时禁用所有菜单命令，树视图显示提示文案。
-2. **文件被移动/重命名**：分组中存储的相对路径会失效，树视图中灰显并标注「（不存在）」，可右键移除（v2 可考虑监听 `onDidRenameFiles` 自动更新）。
+1. **多根工作区**：每个 `WorkspaceFolder` 各自维护 `.vscode/tab-groups.json`；路径相对**该根**。侧边栏多根时顶层按文件夹分区（scope），单根不额外加层。无工作区文件夹时禁用并提示。不支持把文件跨根加入另一根的分组。
+2. **文件被移动/重命名**：分组中存储的相对路径会失效，树视图中灰显并标注「（不存在）」，可右键移除（已监听 `onDidRenameFiles` 刷新存在性）。
 3. **正则表达式转义**：用户输入的正则需经过 `new RegExp()` 验证，无效时提示错误。
-4. **性能**：扫描大量文件时使用 `withProgress` 并支持取消。
-5. **配置文件热重载**：外部修改或编辑器内保存 `.vscode/tab-groups.json` 后自动重新加载（v1 已实现）。
+4. **性能**：扫描大量文件时使用 `withProgress` 并支持取消；扫描范围限于目标根。
+5. **配置文件热重载**：外部修改或编辑器内保存各根 `.vscode/tab-groups.json` 后自动重新加载。
 6. **快捷键同步（v2）**：同步 `keybindings.json` 时整文件 JSON 重写，原有注释可能丢失；`ctrl+shift+p` 与 VS Code 命令面板默认快捷键冲突，需用户自行改绑。
-7. **设置页快捷键保存**：需单根工作区；无工作区时 Webview 可预览不可保存。
-8. **节点搜索**：只过滤侧边栏已记录的节点，不扫描磁盘；包含/排除是文件夹路径，不是分组节点。
+7. **设置页快捷键保存**：需已打开工作区；无工作区时 Webview 可预览不可保存。
+8. **节点搜索**：只过滤侧边栏已记录的节点，不扫描磁盘；包含/排除是相对各根的文件夹路径，不是分组节点。
 
 ---
 
@@ -603,7 +611,7 @@ version/                         # 版本信息（不参与运行时）；约定
 
 | 示例文件                       | 对应实际路径                                                                   |
 | -------------------------- | ------------------------------------------------------------------------ |
-| `example/tab-groups.json`  | 工作区 `.vscode/tab-groups.json`（schema `1.5.0`：嵌套分组、别名、`markers`、`branch`） |
+| `example/tab-groups.json`  | 工作区 `.vscode/tab-groups.json`（schema `1.6.0`：嵌套分组、别名、`markers`、`branch`、可选 `color`/`icon`） |
 | `example/settings.json`    | 工作区 `.vscode/settings.json`（`tabGroups.shortcuts` + `tabGroups.display` + `tabGroups.search`） |
 | `example/keybindings.json` | 用户 `User/keybindings.json`（保存快捷键时同步，非工作区文件）                              |
 

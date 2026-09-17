@@ -1,15 +1,14 @@
 import * as vscode from 'vscode';
 import { TabGroupsManager } from '../data/tabGroupsManager';
 import { getGroupPathLabel } from '../data/groupHierarchyUtils';
-import { ensureValidWorkspace } from '../workspace/workspaceUtils';
+import { isValidWorkspace } from '../workspace/workspaceUtils';
 
 /** 设置页 / 命令：导出全部或所选分组；成功写入文件返回 true */
 export async function runExportTabGroups(
   manager: TabGroupsManager,
   presetGroupIds?: string[],
 ): Promise<boolean> {
-  const folder = await ensureValidWorkspace();
-  if (!folder) {
+  if (!isValidWorkspace()) {
     return false;
   }
 
@@ -63,7 +62,7 @@ export async function runExportTabGroups(
     : 'tab-groups-export.json';
 
   const uri = await vscode.window.showSaveDialog({
-    defaultUri: vscode.Uri.joinPath(folder.uri, defaultName),
+    defaultUri: vscode.Uri.joinPath(manager.folder.uri, defaultName),
     filters: { JSON: ['json'] },
     saveLabel: '导出',
   });
@@ -82,8 +81,7 @@ export async function runExportTabGroups(
 
 /** 设置页 / 命令：从 JSON 文件导入；成功写入返回 true */
 export async function runImportTabGroups(manager: TabGroupsManager): Promise<boolean> {
-  const folder = await ensureValidWorkspace();
-  if (!folder) {
+  if (!isValidWorkspace()) {
     return false;
   }
 
@@ -91,7 +89,7 @@ export async function runImportTabGroups(manager: TabGroupsManager): Promise<boo
     canSelectMany: false,
     openLabel: '导入',
     filters: { JSON: ['json'] },
-    defaultUri: folder.uri,
+    defaultUri: manager.folder.uri,
   });
   if (!pickedFiles || pickedFiles.length === 0) {
     return false;

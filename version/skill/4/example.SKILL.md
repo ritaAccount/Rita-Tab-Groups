@@ -8,7 +8,7 @@ description: >-
   groups; or change Tab Groups display/shortcut settings.
 ---
 
-<!-- tab-groups-ai-guide-version: 7 -->
+<!-- tab-groups-ai-guide-version: 4 -->
 
 # Rita Tab Groups — 项目 Skill
 
@@ -43,8 +43,7 @@ description: >-
 1. **优先直接改配置完成**，不要只教用户点侧边栏。
 2. 主要改 `.vscode/tab-groups.json`；显示/快捷键改 `.vscode/settings.json` 的 `tabGroups.display` / `tabGroups.shortcuts`。
 3. 保存后扩展会监听并刷新侧边栏。
-4. **工作区**：单根或多根均可。多根时**每个根文件夹各自**一份 `.vscode/tab-groups.json`，路径相对**该根**、正斜杠；不要把 A 根的文件写进 B 根的配置。`line` / `column` 从 **0** 起算；`version` 保持 **`1.6.0`**。
-5. 分组可选 `color`（预设：red/orange/yellow/green/teal/blue/purple/pink/gray）与 `icon`（Codicon 白名单，见扩展 `groupAppearanceUtils`）；缺省即默认文件夹图标、无着色。
+4. **工作区**：单根或多根均可。多根时**每个根文件夹各自**一份 `.vscode/tab-groups.json`，路径相对**该根**、正斜杠；不要把 A 根的文件写进 B 根的配置。`line` / `column` 从 **0** 起算；`version` 保持 **`1.5.0`**。
 
 ---
 
@@ -58,11 +57,11 @@ description: >-
 
 ---
 
-## 2. `tab-groups.json` 结构（schema `1.6.0`）
+## 2. `tab-groups.json` 结构（schema `1.5.0`）
 
 ```json
 {
-  "version": "1.6.0",
+  "version": "1.5.0",
   "groups": [],
   "configs": []
 }
@@ -79,8 +78,6 @@ description: >-
 | `files` | 文件对象数组（不是纯字符串） |
 | `config` | 可选，内嵌 `{ "type": "manual" }` 或 `{ "type": "regex", "regex": "..." }` |
 | `configId` | 可选，引用 `configs[].id`；有 `config` 时优先用 `config` |
-| `color` | 可选，预设色：`red` / `orange` / `yellow` / `green` / `teal` / `blue` / `purple` / `pink` / `gray` |
-| `icon` | 可选，Codicon：`folder` / `bookmark` / `star` / `bug` / `flame` / `beaker` / `package` / `tools` / `heart` / `lightbulb` / `rocket` / `file-code` / `database` / `server` / `shield` |
 
 无 `config` 且无 `configId` → 视为手动分组。
 
@@ -207,9 +204,7 @@ description: >-
     "addFunction": "ctrl+shift+;",
     "addText": "ctrl+shift+'",
     "prevCursor": "ctrl+shift+[",
-    "nextCursor": "ctrl+shift+]",
-    "setGroupColor": "ctrl+alt+c",
-    "setGroupIcon": "ctrl+alt+i"
+    "nextCursor": "ctrl+shift+]"
   }
 }
 ```
@@ -220,7 +215,7 @@ description: >-
 | `hover` | 仅悬停显示 |
 | `both` | 名称后与悬停都显示 |
 
-快捷键写入 settings 后，用户若要立刻全局生效，可能还需在扩展设置页保存一次以同步本机 `keybindings.json`；改 settings 本身即可完成配置层面修改。某键写成 `""` 表示**不绑定**（并解除扩展默认键）。
+快捷键写入 settings 后，用户若要立刻全局生效，可能还需在扩展设置页保存一次以同步本机 `keybindings.json`；改 settings 本身即可完成配置层面修改。
 
 ---
 
@@ -229,7 +224,6 @@ description: >-
 支持 `executeCommand` 时可调用（需已打开至少一个工作区文件夹），例如：
 
 - `tabGroups.createGroup` / `tabGroups.createSubGroup` / `tabGroups.deleteGroup` / `tabGroups.renameGroup`
-- `tabGroups.setGroupColor` / `tabGroups.setGroupIcon`
 - `tabGroups.addToGroup` / `tabGroups.removeFromGroup`
 - `tabGroups.addCursor` / `tabGroups.addFunction` / `tabGroups.addText`
 - `tabGroups.scanFiles` / `tabGroups.openSettings`
@@ -243,5 +237,5 @@ description: >-
 
 1. 用户说「建个分组把这些文件放进去」「给这个函数加个标记」→ 直接改 `tab-groups.json`。  
 2. 改前读现有 JSON，保持 `id` / `children` / `level` 一致，避免重复 `path`。  
-3. `version` 保持与扩展一致（当前 `1.6.0`）；不要擅自降级。  
+3. `version` 保持与扩展一致（当前 `1.5.0`）；不要擅自降级。  
 4. 不要把示例路径当成用户仓库里一定存在的文件。

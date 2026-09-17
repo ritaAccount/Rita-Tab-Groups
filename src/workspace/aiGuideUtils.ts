@@ -1,10 +1,9 @@
 import * as vscode from 'vscode';
-import { getWorkspaceFolder } from './workspaceUtils';
 
 /** 与 media/tab-groups.skill.md 顶部版本注释一致；升高后会覆盖工作区已写入的 Skill。
  * 升版时须新建 version/skill/<新版本>/（changes.json + 完整 example，见 version/explain.md）。
  */
-export const AI_GUIDE_VERSION = 3;
+export const AI_GUIDE_VERSION = 7;
 
 /** 工作区项目 Skill（Cursor Agent Skills） */
 export const AI_SKILL_RELATIVE_PATH = '.cursor/skills/tab-groups/SKILL.md';
@@ -12,14 +11,13 @@ export const AI_SKILL_RELATIVE_PATH = '.cursor/skills/tab-groups/SKILL.md';
 const VERSION_COMMENT_RE = /tab-groups-ai-guide-version:\s*(\d+)/;
 
 /**
- * 激活时写入/更新 `.cursor/skills/tab-groups/SKILL.md`，
- * 引导用户用自然语言让 Agent 改 Tab Groups 配置。
+ * 激活时为每个工作区根写入/更新 `.cursor/skills/tab-groups/SKILL.md`。
  * 仅当目标不存在或指南版本落后时覆盖。
- * @returns 是否实际写入了文件
+ * @returns 是否至少写入了一个文件
  */
-export async function ensureWorkspaceAiGuide(): Promise<boolean> {
-  const folder = getWorkspaceFolder();
-  if (!folder) {
+export async function ensureWorkspaceAiGuides(): Promise<boolean> {
+  const folders = vscode.workspace.workspaceFolders ?? [];
+  if (folders.length === 0) {
     return false;
   }
 
@@ -28,10 +26,23 @@ export async function ensureWorkspaceAiGuide(): Promise<boolean> {
     return false;
   }
 
-  return writeIfNeeded(
-    vscode.Uri.joinPath(folder.uri, AI_SKILL_RELATIVE_PATH),
-    vscode.Uri.joinPath(extension.extensionUri, 'media', 'tab-groups.skill.md'),
-  );
+  const templateUri = vscode.Uri.joinPath(extension.extensionUri, 'media', 'tab-groups.skill.md');
+  let wroteAny = false;
+  for (const folder of folders) {
+    const wrote = await writeIfNeeded(
+      vscode.Uri.joinPath(folder.uri, AI_SKILL_RELATIVE_PATH),
+      templateUri,
+    );
+    if (wrote) {
+      wroteAny = true;
+    }
+  }
+  return wroteAny;
+}
+
+/** @deprecated 使用 ensureWorkspaceAiGuides；保留别名以免旧调用断裂 */
+export async function ensureWorkspaceAiGuide(): Promise<boolean> {
+  return ensureWorkspaceAiGuides();
 }
 
 async function writeIfNeeded(targetUri: vscode.Uri, templateUri: vscode.Uri): Promise<boolean> {

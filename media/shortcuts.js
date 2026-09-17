@@ -12,6 +12,8 @@
     addText: "ctrl+shift+'",
     prevCursor: 'ctrl+shift+[',
     nextCursor: 'ctrl+shift+]',
+    setGroupColor: 'ctrl+alt+c',
+    setGroupIcon: 'ctrl+alt+i',
   };
 
   /** @type {string | null} */
@@ -33,7 +35,9 @@
     shortcutButtons.forEach((button) => {
       const field = button.dataset.shortcut;
       if (field) {
-        button.textContent = shortcuts[field];
+        const value = shortcuts[field] || '';
+        button.textContent = value || '未设置';
+        button.classList.toggle('unset', !value);
       }
     });
   }
@@ -116,6 +120,14 @@
 
       if (event.key === 'Escape') {
         stopRecording();
+        return;
+      }
+
+      if (event.key === 'Backspace' || event.key === 'Delete') {
+        shortcuts[field] = '';
+        renderButtons();
+        stopRecording();
+        setStatus('已清除快捷键（不绑定）');
         return;
       }
 

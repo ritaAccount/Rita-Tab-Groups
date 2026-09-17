@@ -1,0 +1,11 @@
+{
+  "version": "1.6.0",
+  "kind": "tab-groups",
+  "from": "1.5.0",
+  "summary": "分组可选颜色与图标",
+  "changes": [
+    "Group 新增可选字段 color（预设色板 id：red/orange/yellow/green/teal/blue/purple/pink/gray）",
+    "Group 新增可选字段 icon（Codicon 白名单，如 folder/bookmark/star/bug/…）",
+    "缺省时侧边栏仍用默认文件夹图标、无着色"
+  ]
+}

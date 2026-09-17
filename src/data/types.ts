@@ -26,6 +26,10 @@ export interface Group {
   files: GroupFileEntry[];
   config?: InlineConfig;
   configId?: string;
+  /** 预设色板 id（见 groupAppearanceUtils），可选 */
+  color?: string;
+  /** Codicon id（白名单），可选；默认 folder */
+  icon?: string;
 }
 
 export interface GroupFileEntry {
@@ -128,6 +132,8 @@ export interface ShortcutSettings {
   addText: string;
   prevCursor: string;
   nextCursor: string;
+  setGroupColor: string;
+  setGroupIcon: string;
 }
 
 export const DEFAULT_SHORTCUTS: ShortcutSettings = {
@@ -140,6 +146,8 @@ export const DEFAULT_SHORTCUTS: ShortcutSettings = {
   addText: "ctrl+shift+'",
   prevCursor: 'ctrl+shift+[',
   nextCursor: 'ctrl+shift+]',
+  setGroupColor: 'ctrl+alt+c',
+  setGroupIcon: 'ctrl+alt+i',
 };
 
 export const SHORTCUT_COMMANDS = {
@@ -152,12 +160,14 @@ export const SHORTCUT_COMMANDS = {
   addText: 'tabGroups.addText',
   prevCursor: 'tabGroups.prevCursor',
   nextCursor: 'tabGroups.nextCursor',
+  setGroupColor: 'tabGroups.setGroupColor',
+  setGroupIcon: 'tabGroups.setGroupIcon',
 } as const;
 
 export const SHORTCUT_WHEN = {
-  file: 'workspaceFolderCount == 1 && resourceScheme == file',
-  fileEditor: 'workspaceFolderCount == 1 && resourceScheme == file && editorTextFocus',
-  workspace: 'workspaceFolderCount == 1',
+  file: 'workspaceFolderCount >= 1 && resourceScheme == file',
+  fileEditor: 'workspaceFolderCount >= 1 && resourceScheme == file && editorTextFocus',
+  workspace: 'workspaceFolderCount >= 1',
 } as const;
 
 export const MANAGED_SHORTCUT_COMMANDS = Object.values(SHORTCUT_COMMANDS);

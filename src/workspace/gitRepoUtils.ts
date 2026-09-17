@@ -1,7 +1,6 @@
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import * as vscode from 'vscode';
-import { getWorkspaceFolder } from './workspaceUtils';
 import {
   GitRepoInfo,
   normalizeFsPath,
@@ -40,12 +39,9 @@ const SKIP_DIR_NAMES = new Set([
  * 1) 内置 Git 扩展已登记、且落在工作区下的仓库；
  * 2) 若无，则检测工作区根；再浅层扫描子目录中的嵌套仓库。
  */
-export async function discoverGitRepos(): Promise<GitRepoInfo[]> {
-  const folder = getWorkspaceFolder();
-  if (!folder) {
-    return [];
-  }
-
+export async function discoverGitRepos(
+  folder: vscode.WorkspaceFolder,
+): Promise<GitRepoInfo[]> {
   const workspaceRoot = folder.uri.fsPath;
   const fromApi = await listReposFromGitExtension(workspaceRoot);
   if (fromApi.length > 0) {

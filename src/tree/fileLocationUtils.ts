@@ -27,13 +27,16 @@ export function registerMarkerJumpHint(context: vscode.ExtensionContext): void {
   });
 }
 
-export function getMatchingActiveEditor(relativePath: string): vscode.TextEditor | undefined {
+export function getMatchingActiveEditor(
+  folder: vscode.WorkspaceFolder,
+  relativePath: string,
+): vscode.TextEditor | undefined {
   const editor = vscode.window.activeTextEditor;
   if (!editor) {
     return undefined;
   }
 
-  const activePath = toRelativePath(editor.document.uri);
+  const activePath = toRelativePath(editor.document.uri, folder);
   return activePath === relativePath ? editor : undefined;
 }
 
@@ -315,13 +318,11 @@ export function resolveEntryPosition(
 }
 
 export async function openFileEntry(
+  folder: vscode.WorkspaceFolder,
   entry: GroupFileEntry,
   options?: { preserveFocus?: boolean; markerIndex?: number },
 ): Promise<boolean> {
-  const uri = toAbsoluteUri(entry.path);
-  if (!uri) {
-    return false;
-  }
+  const uri = toAbsoluteUri(entry.path, folder);
 
   try {
     const document = await vscode.workspace.openTextDocument(uri);
@@ -351,14 +352,12 @@ export async function openFileEntry(
 }
 
 export async function openFileAtMarker(
+  folder: vscode.WorkspaceFolder,
   entry: GroupFileEntry,
   marker: FlatFileMarker,
   options?: { preserveFocus?: boolean },
 ): Promise<boolean> {
-  const uri = toAbsoluteUri(entry.path);
-  if (!uri) {
-    return false;
-  }
+  const uri = toAbsoluteUri(entry.path, folder);
 
   try {
     const document = await vscode.workspace.openTextDocument(uri);

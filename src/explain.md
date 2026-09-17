@@ -30,8 +30,8 @@ Webview 静态资源在仓库根的 `media/`，**不要**放进 `src/`。
 
 | 目录 | 职责 | 现有文件 | 新文件该不该放这里 |
 |------|------|----------|-------------------|
-| `data/` | 类型、`.vscode/tab-groups.json` 读写、文件条目 / 嵌套分组 / schema 版本、导入导出打包 | `types.ts`、`tabGroupsManager.ts`、`fileEntryUtils.ts`、`groupHierarchyUtils.ts`、`importExportUtils.ts` | 只动分组 JSON 结构、CRUD、迁移、导入导出纯逻辑时 |
-| `workspace/` | 单根工作区校验、相对/绝对路径、文件是否存在、当前 Git 分支、嵌套仓库发现、AI Skill 初始化、一键工作集采集、AI 上下文导出 | `workspaceUtils.ts`、`fileExistenceCache.ts`、`gitBranchUtils.ts`、`gitRepoUtils.ts`、`gitRepoPathUtils.ts`、`aiGuideUtils.ts`、`workingSetUtils.ts`、`workingSetParseUtils.ts`、`aiContextUtils.ts`、`aiContextFormatUtils.ts` | 只与「当前工作区 / 磁盘路径 / 仓库分支与嵌套仓 / 打开标签与 Git 变更采集 / AI 上下文文本 / 写入工作区引导文件」有关时 |
+| `data/` | 类型、`.vscode/tab-groups.json` 读写、文件条目 / 嵌套分组 / schema 版本、导入导出打包、多根门面、分组外观白名单 | `types.ts`、`tabGroupsManager.ts`、`tabGroupsWorkspace.ts`、`groupAppearanceUtils.ts`、`fileEntryUtils.ts`、`groupHierarchyUtils.ts`、`importExportUtils.ts` | 只动分组 JSON 结构、CRUD、迁移、导入导出纯逻辑、按根聚合、颜色/图标白名单时 |
+| `workspace/` | 工作区校验（≥1 根）、相对/绝对路径、文件是否存在、当前 Git 分支、嵌套仓库发现、AI Skill 初始化、一键工作集采集、AI 上下文导出 | `workspaceUtils.ts`、`fileExistenceCache.ts`、`gitBranchUtils.ts`、`gitRepoUtils.ts`、`gitRepoPathUtils.ts`、`aiGuideUtils.ts`、`workingSetUtils.ts`、`workingSetParseUtils.ts`、`aiContextUtils.ts`、`aiContextFormatUtils.ts` | 只与「当前工作区 / 磁盘路径 / 仓库分支与嵌套仓 / 打开标签与 Git 变更采集 / AI 上下文文本 / 写入工作区引导文件」有关时 |
 | `tree/` | 侧边栏树、用户命令、批量开/关标签、标记跳转与提示、侧边栏搜索+列表 | `treeProvider.ts`、`commands.ts`、`groupEditorUtils.ts`、`fileLocationUtils.ts`、`searchView.ts`、`searchFilter.ts`、`fileIconTheme.ts` | 新的树节点、右键/快捷命令、编辑器跳转、侧边栏搜索时 |
 | `settings/` | 设置 Webview、快捷键读写与 keybindings 同步、显示配置、搜索配置、导入导出对话框 | `settingsWebview.ts`、`importExportCommands.ts`、`shortcutUtils.ts`、`displaySettingsUtils.ts`、`searchSettingsUtils.ts` | 设置页新分类、工作区 `tabGroups.*` 配置项、导入导出交互时 |
 
