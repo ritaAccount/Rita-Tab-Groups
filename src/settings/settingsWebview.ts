@@ -17,27 +17,52 @@ import {
 import { ensureWorkspaceShortcutSettings, getShortcuts, saveShortcuts } from './shortcutUtils';
 import { applyMarkerJumpHintVisibility } from '../tree/fileLocationUtils';
 import { getWorkspaceFolder, getWorkspaceInvalidMessage, isValidWorkspace } from '../workspace/workspaceUtils';
+import { runExportTabGroups, runImportTabGroups } from './importExportCommands';
 
 let panel: vscode.WebviewPanel | undefined;
 let settingsManager: TabGroupsManager | undefined;
 let onConfigUpgraded: (() => void) | undefined;
 let onDisplaySettingsChanged: (() => void) | undefined;
+let onImportExportDone: (() => void) | undefined;
 let extensionVersion = 'unknown';
 
 export function registerSettingsCommands(
   context: vscode.ExtensionContext,
   manager: TabGroupsManager,
-  options?: { onConfigUpgraded?: () => void; onDisplaySettingsChanged?: () => void },
+  options?: {
+    onConfigUpgraded?: () => void;
+    onDisplaySettingsChanged?: () => void;
+    onImportExportDone?: () => void;
+  },
 ): void {
   settingsManager = manager;
   onConfigUpgraded = options?.onConfigUpgraded;
   onDisplaySettingsChanged = options?.onDisplaySettingsChanged;
+  onImportExportDone = options?.onImportExportDone;
   extensionVersion =
     (context.extension.packageJSON as { version?: string }).version ?? 'unknown';
 
   context.subscriptions.push(
     vscode.commands.registerCommand('tabGroups.openSettings', () => {
       openSettingsWebview(context);
+    }),
+    vscode.commands.registerCommand('tabGroups.exportConfig', async () => {
+      if (!settingsManager) {
+        return;
+      }
+      const ok = await runExportTabGroups(settingsManager);
+      if (ok) {
+        onImportExportDone?.();
+      }
+    }),
+    vscode.commands.registerCommand('tabGroups.importConfig', async () => {
+      if (!settingsManager) {
+        return;
+      }
+      const ok = await runImportTabGroups(settingsManager);
+      if (ok) {
+        onImportExportDone?.();
+      }
     }),
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (!event.affectsConfiguration('tabGroups.display')) {
@@ -105,6 +130,35 @@ function openSettingsWebview(context: vscode.ExtensionContext): void {
 
     if (message.type === 'openConfigsFile') {
       await openTabGroupsJson(panel!, 'configs');
+      return;
+    }
+
+    if (message.type === 'exportConfig') {
+      if (!settingsManager) {
+        return;
+      }
+      const ok = await runExportTabGroups(settingsManager);
+      if (ok) {
+        onImportExportDone?.();
+        panel!.webview.postMessage({ type: 'generalStatus', text: '已导出配置文件。' });
+      } else {
+        panel!.webview.postMessage({ type: 'generalStatus', text: '已取消导出。' });
+      }
+      return;
+    }
+
+    if (message.type === 'importConfig') {
+      if (!settingsManager) {
+        return;
+      }
+      const ok = await runImportTabGroups(settingsManager);
+      if (ok) {
+        onImportExportDone?.();
+        postVersionInfo(panel!);
+        panel!.webview.postMessage({ type: 'generalStatus', text: '已导入并写入配置。' });
+      } else {
+        panel!.webview.postMessage({ type: 'generalStatus', text: '已取消导入。' });
+      }
       return;
     }
 
@@ -364,6 +418,22 @@ function getWebviewHtml(webview: vscode.Webview, extensionUri: vscode.Uri): stri
               <div class="setting-desc" id="versionDesc">检查并升级 tab-groups.json schema</div>
             </div>
             <button type="button" class="primary" id="upgradeConfig">检查更新</button>
+          </div>
+
+          <div class="setting-item">
+            <div class="setting-text">
+              <div class="setting-title">导出配置</div>
+              <div class="setting-desc">导出全部或所选分组（含子树与引用的全局规则）为 JSON 文件</div>
+            </div>
+            <button type="button" class="primary" id="exportConfig">导出</button>
+          </div>
+
+          <div class="setting-item">
+            <div class="setting-text">
+              <div class="setting-title">导入配置</div>
+              <div class="setting-desc">从 JSON 合并到当前，或整文件替换</div>
+            </div>
+            <button type="button" class="primary" id="importConfig">导入</button>
           </div>
 
           <div id="generalStatus" class="status"></div>

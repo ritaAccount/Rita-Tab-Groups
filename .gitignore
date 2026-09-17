@@ -3,7 +3,10 @@ node_modules
 .vscode-test/
 *.vsix
 .DS_Store
-
+# 本机发版（含 PAT）与私有开发记录；不提交
+scripts/publish.js
+scripts/publish.secrets.json
+developer-record.private.md
 # Agent / AI assistant config (Cursor, Claude, Codex, etc.)
 .cursor/
 .cursorrules

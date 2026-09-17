@@ -46,6 +46,9 @@ Think of it as a **project map**, not a tab session saver.
 - **Custom shortcuts** — capture in Settings, sync to your `keybindings.json`
 - **AI Skill** — writes `.cursor/skills/tab-groups/SKILL.md` so agents can edit groups for you
 - **Team-friendly** — commit the JSON; everyone gets the same map
+- **Import / export** — share full config or selected group subtrees as JSON files
+- **Working sets** — create a group from open editors or from Git changes in one step
+- **AI context copy** — copy a group’s paths (or full file bodies) as Markdown for Chat / Agent
 
 ### Quick start
 
@@ -81,10 +84,15 @@ Rita Tab Groups              ＋  ⚙
 | Action | How |
 |--------|-----|
 | New group | Title **＋**, empty-area context menu, or shortcut |
+| From open editors | Command Palette / sidebar **…** → **Create Group from Open Editors** |
+| Add open editors to a group | Sidebar **…** → **Add Open Editors to Group** |
+| From Git changes | Sidebar **…** → **Create Group from Git Changes** (pick nested repos if needed) |
 | Nested subgroup | Right-click a group → **New Subgroup** |
 | Rename / delete | Context menu (delete also has a shortcut) |
 | Open all files | Context → **Open All Files in Group** |
 | Close all open tabs of that group | Context → **Close All Files in Group** |
+| Export this group | Context → **Export this group** (subtree + referenced shared configs) |
+| Copy as AI context | Context → **Copy as AI Context** (paths only, or paths + file bodies) |
 | Manual / inline regex / shared config | Context menu |
 | Scan | Regex groups only — rescans workspace and **replaces** the file list |
 | Manage shared configs | Opens `.vscode/tab-groups.json` |
@@ -109,9 +117,11 @@ Closing an editor tab **does not** remove the file from the group. Use **Remove 
 
 #### Settings (gear)
 
-- **General** — open `tab-groups.json`; migrate schema when outdated
+- **General** — open `tab-groups.json`; migrate schema when outdated; **Export** / **Import** config (full or selected groups; merge or replace)
 - **Display** — marker hint (always / timed / off); show source branch; where to show group type (label / hover / both)
 - **Shortcuts** — click a field, press keys, Save → workspace `tabGroups.shortcuts` + user `keybindings.json`
+
+You can also right-click a group → **Export this group** (subtree + referenced shared configs).
 
 Default shortcuts (customize anytime):
 
@@ -238,6 +248,9 @@ Validated on save; watch escaping (`.` → `\.`).
 - **自定义快捷键** — 设置页按一下就录入，同步到本机 `keybindings.json`
 - **AI Skill** — 激活时写入 `.cursor/skills/tab-groups/SKILL.md`，让 Agent 直接改配置
 - **可协作** — JSON 进版本库，全队同一张地图
+- **导入 / 导出** — 整份或所选分组子树，另存为 JSON 再导入
+- **一键工作集** — 从当前打开的标签，或从 Git 变更，一键收成分组
+- **复制为 AI 上下文** — 把整组路径或文件内容复制成 Markdown，粘贴给 Chat / Agent
 
 ### 五分钟上手
 
@@ -273,10 +286,15 @@ Validated on save; watch escaping (`.` → `\.`).
 | 操作 | 怎么做 |
 |------|--------|
 | 新建分组 | 标题栏 **＋**、空白处右键，或快捷键 |
+| 从打开的标签创建分组 | 命令面板，或侧边栏标题 **…** → **从打开的标签创建分组** |
+| 将打开的标签加入分组 | 侧边栏 **…** → **将打开的标签加入分组** |
+| 从 Git 变更创建分组 | 侧边栏 **…** → **从 Git 变更创建分组**（含未提交 / 未跟踪；若有多个子仓库会让你选择） |
 | 新建子分组 | 右键分组 → **新建子分组** |
 | 重命名 / 删除 | 右键（删除也有快捷键） |
 | 打开组内所有文件 | 右键 → **打开组内所有文件** |
 | 关闭组内已打开标签 | 右键 → **关闭组内所有文件** |
+| 导出此分组 | 右键 → **导出此分组**（含子分组与引用的全局规则） |
+| 复制为 AI 上下文 | 右键 → **复制为 AI 上下文**（仅路径，或路径+文件内容，粘贴到 Chat） |
 | 手动 / 内嵌正则 / 引用全局配置 | 右键菜单 |
 | 扫描文件 | 仅正则分组——重新扫描并**覆盖**当前文件列表 |
 | 管理全局配置 | 打开 `.vscode/tab-groups.json` |
@@ -301,9 +319,11 @@ Validated on save; watch escaping (`.` → `\.`).
 
 #### 设置（齿轮）
 
-- **通用** — 打开 `tab-groups.json`；配置 schema 落后时可一键升级
+- **通用** — 打开 `tab-groups.json`；配置 schema 落后时可一键升级；**导出配置** / **导入配置**（全部或所选分组；导入可合并或整文件替换）
 - **显示** — 标记提示（一直 / 按秒 / 关）；是否显示来源分支；分组类型显示在名称后 / 仅悬停 / 两者都要
 - **快捷键** — 点输入框再按键，保存后写入工作区 `tabGroups.shortcuts` 并同步本机 keybindings
+
+分组也可右键 **导出此分组**（该子树 + 引用到的全局规则）。
 
 **默认快捷键**（随时可改）：
 

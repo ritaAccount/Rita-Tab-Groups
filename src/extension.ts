@@ -30,6 +30,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     onDisplaySettingsChanged: () => {
       treeProvider?.refresh();
     },
+    onImportExportDone: () => {
+      treeProvider?.refresh();
+    },
   });
 
   context.subscriptions.push(

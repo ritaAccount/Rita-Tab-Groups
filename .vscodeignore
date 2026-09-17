@@ -13,9 +13,11 @@ package-lock.json
 .cursor/**
 developer-readme.md
 developer-record.md
+developer-record.private.md
 developer-mission-list.md
 AGENTS.md
 CLAUDE.md
 example/**
 version/**
+scripts/**
 vsc-extension-quickstart.md

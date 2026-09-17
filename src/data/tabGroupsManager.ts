@@ -28,6 +28,13 @@ import {
   updateGroupLevels,
 } from './groupHierarchyUtils';
 import {
+  buildExportPackage,
+  mergeImportPackage,
+  parseImportPackage,
+  replaceImportPackage,
+  TabGroupsPackage,
+} from './importExportUtils';
+import {
   CONFIG_RELATIVE_PATH,
   GlobalConfig,
   Group,
@@ -235,24 +242,44 @@ export class TabGroupsManager {
   }
 
   async addFileToGroup(groupId: string, filePath: string): Promise<boolean> {
+    const result = await this.addFilesToGroup(groupId, [filePath]);
+    return result.added > 0;
+  }
+
+  /** 批量加入分组；跳过已存在路径；只写盘一次 */
+  async addFilesToGroup(
+    groupId: string,
+    filePaths: string[],
+  ): Promise<{ added: number; skipped: number }> {
     const group = this.getGroup(groupId);
-    if (!group) {
-      return false;
+    if (!group || filePaths.length === 0) {
+      return { added: 0, skipped: filePaths.length };
     }
-    if (groupContainsPath(group, filePath)) {
-      return false;
-    }
-    const entry: GroupFileEntry = {
-      path: filePath,
-      alias: defaultAliasFromPath(filePath),
-    };
+
     const branch = await getCurrentGitBranch();
-    if (branch) {
-      entry.branch = branch;
+    let added = 0;
+    let skipped = 0;
+
+    for (const filePath of filePaths) {
+      if (!filePath || groupContainsPath(group, filePath)) {
+        skipped += 1;
+        continue;
+      }
+      const entry: GroupFileEntry = {
+        path: filePath,
+        alias: defaultAliasFromPath(filePath),
+      };
+      if (branch) {
+        entry.branch = branch;
+      }
+      group.files.push(entry);
+      added += 1;
     }
-    group.files.push(entry);
-    await this.save();
-    return true;
+
+    if (added > 0) {
+      await this.save();
+    }
+    return { added, skipped };
   }
 
   async removeFileFromGroup(groupId: string, filePath: string): Promise<void> {
@@ -658,5 +685,36 @@ export class TabGroupsManager {
     } catch {
       return undefined;
     }
+  }
+
+  /** 导出全部或指定分组子树（含被引用的全局 configs） */
+  buildExportPackage(selectedGroupIds?: string[]): TabGroupsPackage {
+    return buildExportPackage(this.data.groups, this.data.configs, selectedGroupIds);
+  }
+
+  parseImportPackage(raw: unknown): TabGroupsPackage {
+    return parseImportPackage(raw);
+  }
+
+  async importPackage(
+    incoming: TabGroupsPackage,
+    mode: 'merge' | 'replace',
+  ): Promise<{ groupsAdded: number; configsAdded: number }> {
+    if (mode === 'replace') {
+      this.data = replaceImportPackage(incoming);
+      await this.save();
+      return {
+        groupsAdded: this.data.groups.length,
+        configsAdded: this.data.configs.length,
+      };
+    }
+
+    const result = mergeImportPackage(this.data, incoming);
+    this.data = result.data;
+    await this.save();
+    return {
+      groupsAdded: result.groupsAdded,
+      configsAdded: result.configsAdded,
+    };
   }
 }

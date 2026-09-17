@@ -67,6 +67,7 @@ version/
 
 ## 与其它文档的关系
 
-- 产品决策与实现过程写在 `developer-record.md`。
+- 产品决策与实现过程写在 `developer-record.md`（公开）。
+- 维护者本机敏感操作（PAT、发版脚本等）写在 `developer-record.private.md`（gitignore，不提交）。
 - 用户用法写在 `README.md`。
 - 本目录只回答：「某一版相对上一版改了什么」以及「该版完整长什么样」。

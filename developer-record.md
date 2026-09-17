@@ -1,7 +1,11 @@
-# Tab Groups — 开发记录
+# Tab Groups — 开发记录（公开）
 
-> 记录各版本开发过程中人类与 AI 的决策、澄清与实现偏差修正，供后续版本参考。  
+> 记录各版本开发过程中人类与 AI 的**产品与实现**决策、澄清与 bugfix，供其他开发者 / AI 参考。  
 > 产品需求与 API 说明见 [developer-readme.md](./developer-readme.md)。
+>
+> **分工**：
+> - 本文件 `developer-record.md`：可进仓库；写功能、数据结构、交互、公开命令与文件路径。
+> - `developer-record.private.md`：仅维护者本机；写 PAT、发版脚本、账号等敏感调整（已 `.gitignore`，不提交）。
 
 ---
 
@@ -548,5 +552,92 @@ media/shortcuts.js        # 按键捕获逻辑
 | 发布 | 无需单独网页上传；`vsce publish` 打进 VSIX 后 Marketplace 自动显示 |
 | 注意 | 须 PNG（勿 SVG）；勿被 `.vscodeignore` 排除；活动栏 Codicon 与 Marketplace 图标无关 |
 
+### 图标四角倒圆（2026-09-16）
+
+| 项 | 决策 |
+|----|------|
+| 处理 | 从原 1024 JPG 导出透明 PNG，圆角半径约 **26%** 边长；四角透明 |
+| 产物 | 覆盖 `media/icon.png`（**256×256** PNG） |
+
+**涉及文件**：`media/icon.png`
+
 **涉及文件**：`media/icon.png`、`package.json`
+
+---
+
+### 配置导入 / 导出（2026-09-16）
+
+| 项 | 决策 |
+|----|------|
+| 目标 | 跨项目 / 备份分享分组配置；支持部分分组 |
+| 入口 | 设置「通用」导出/导入；命令 `tabGroups.exportConfig` / `importConfig`；分组右键 `exportGroup` |
+| 导出 | 全部，或多选分组（自动含子树 + 被引用的 `configs`）；右键仅当前子树 |
+| 部分导出 | 父未入选时，选中分组在导出包内升为根级并重算 `level` |
+| 文件格式 | 与 `.vscode/tab-groups.json` 同构（`version` / `groups` / `configs`） |
+| 导入 | **合并**（默认）：新 UUID，作为新根级加入；**替换**：确认后整文件覆盖 |
+| schema | 不升高 `CONFIG_VERSION`（仍为 `1.5.0`）；扩展版本 `1.1.3` |
+
+**涉及文件**：`src/data/importExportUtils.ts`、`tabGroupsManager.ts`、`src/settings/importExportCommands.ts`、`settingsWebview.ts`、`media/settings.js`、`src/tree/commands.ts`、`package.json`、文档
+
+---
+
+### 一键工作集（2026-09-17）
+
+| 项 | 决策 |
+|----|------|
+| 产品依据 | 对照 CodeGroup / vs-tab-groups：缺「把当前打开标签 / Git 变更收成地图」 |
+| 命令 | `createGroupFromOpenEditors` / `addOpenEditorsToGroup` / `createGroupFromGitChanges` |
+| 入口 | 命令面板；侧边栏标题 `…` 菜单（`view/title` → `1_workspace`） |
+| 打开标签 | `tabGroups` 中 `TabInputText` / Diff 的 modified / Notebook；仅工作区 `file`；去重保序 |
+| Git 变更 | `git status --porcelain --untracked-files=all`；rename 取新路径 |
+| 命名 | 打开标签默认「打开的标签 MM-DD HH:mm」；Git 默认「Git 变更 \<branch\>」 |
+| 批量写入 | `TabGroupsManager.addFilesToGroup` 一次写盘 |
+| 版本 | 扩展 `1.1.4`；schema 仍 `1.5.0` |
+
+**涉及文件**：`src/workspace/workingSetUtils.ts`、`workingSetParseUtils.ts`、`tabGroupsManager.ts`、`commands.ts`、`package.json`、`src/explain.md`、文档
+
+---
+
+### 复制分组为 AI 上下文（2026-09-17）
+
+| 项 | 决策 |
+|----|------|
+| 产品依据 | VirtualTabs 等「一键 LLM 上下文」；人把整组贴进 Chat，少漏文件 |
+| 命令 | `tabGroups.copyGroupAsAiContext` |
+| 入口 | 分组右键；命令面板（需先选中分组） |
+| 模式 | QuickPick：**路径 + 文件内容**（推荐）/ **仅路径列表** |
+| 范围 | 分组子树去重文件（同打开组内文件） |
+| 格式 | Markdown；内容模式按扩展名围栏语言；内容含 \`\`\` 时自动加长围栏 |
+| 保护 | 单文件 >200KB / 二进制 / 缺失 → 跳过并注明；总长 ≥400KB 状态栏提醒 |
+| 版本 | 扩展 `1.1.5`；schema 仍 `1.5.0` |
+
+**涉及文件**：`src/workspace/aiContextFormatUtils.ts`、`aiContextUtils.ts`、`commands.ts`、`package.json`、文档
+
+---
+
+### 嵌套 Git 仓库选择（2026-09-17）
+
+| 项 | 决策 |
+|----|------|
+| 问题 | 父目录打开、前后端各有 `.git` 时，在父根 `git status` 失败 |
+| 发现 | 优先 VS Code Git 扩展 `repositories`；否则检测工作区根 + 浅层扫描子目录（深 2，跳过 node_modules 等） |
+| 选择 | 多个仓库 QuickPick 可多选；单个直接用 |
+| 路径 | 各仓 porcelain 路径经 `mapRepoPathToWorkspace` 转为相对工作区根 |
+| 提示 | 无仓库 / 无变更 / 取消 分开文案 |
+| 版本 | 扩展 `1.1.6` |
+
+**涉及文件**：`gitRepoPathUtils.ts`、`gitRepoUtils.ts`、`workingSetUtils.ts`、`commands.ts`、`package.json`、文档
+
+---
+
+### 开发记录公开 / 私有拆分（2026-09-17）
+
+| 项 | 决策 |
+|----|------|
+| 公开 | `developer-record.md`：产品与实现决策，可进仓库 |
+| 私有 | `developer-record.private.md`：PAT、本机发版等；`.gitignore` |
+| 约定 | `AGENTS.md` / `CLAUDE.md` / docs-maintenance 规则已同步 |
+
+**涉及文件**：`developer-record.md`、`developer-record.private.md`、`.gitignore`、文档规则
+
 

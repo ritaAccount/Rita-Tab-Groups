@@ -11,7 +11,22 @@ import {
   toAbsoluteUri,
   toRelativePath,
 } from '../workspace/workspaceUtils';
+import {
+  collectGitChangesWithRepoPick,
+  collectOpenEditorRelativePaths,
+  defaultGitChangesGroupName,
+  defaultOpenEditorsGroupName,
+  getGitBranchAt,
+} from '../workspace/workingSetUtils';
+import {
+  AI_CONTEXT_WARN_TOTAL_CHARS,
+  buildAiContextContentsMarkdown,
+  buildAiContextPathsMarkdown,
+  AiContextMode,
+} from '../workspace/aiContextUtils';
 import { TabGroupsSearchViewProvider } from './searchView';
+import { runExportTabGroups } from '../settings/importExportCommands';
+import { getGroupPathLabel } from '../data/groupHierarchyUtils';
 
 export function registerCommands(
   context: vscode.ExtensionContext,
@@ -41,6 +56,206 @@ export function registerCommands(
     await manager.createGroup(name.trim());
     treeProvider.refresh();
     vscode.window.setStatusBarMessage(`已创建分组「${name.trim()}」`, 3000);
+  });
+
+  register('tabGroups.createGroupFromOpenEditors', async () => {
+    const folder = await ensureValidWorkspace();
+    if (!folder) {
+      return;
+    }
+
+    const paths = collectOpenEditorRelativePaths();
+    if (paths.length === 0) {
+      await vscode.window.showInformationMessage('当前没有可加入分组的已打开工作区文件。');
+      return;
+    }
+
+    const name = await vscode.window.showInputBox({
+      prompt: `将 ${paths.length} 个已打开文件建成新分组`,
+      value: defaultOpenEditorsGroupName(),
+      validateInput: (value) => (value.trim() ? undefined : '分组名称不能为空'),
+    });
+    if (!name) {
+      return;
+    }
+
+    const group = await manager.createGroup(name.trim());
+    const result = await manager.addFilesToGroup(group.id, paths);
+    treeProvider.refresh();
+    vscode.window.setStatusBarMessage(
+      `已创建「${group.name}」：加入 ${result.added} 个文件` +
+        (result.skipped ? `，跳过 ${result.skipped}` : ''),
+      4000,
+    );
+  });
+
+  register('tabGroups.addOpenEditorsToGroup', async () => {
+    const folder = await ensureValidWorkspace();
+    if (!folder) {
+      return;
+    }
+
+    const paths = collectOpenEditorRelativePaths();
+    if (paths.length === 0) {
+      await vscode.window.showInformationMessage('当前没有可加入分组的已打开工作区文件。');
+      return;
+    }
+
+    const groups = manager.getGroups();
+    if (groups.length === 0) {
+      await vscode.window.showInformationMessage('暂无分组，请先新建分组或使用「从打开的标签创建分组」。');
+      return;
+    }
+
+    const picked = await vscode.window.showQuickPick(
+      groups.map((group) => ({
+        label: getGroupPathLabel(groups, group.id),
+        description: `${group.files.length} 个文件`,
+        groupId: group.id,
+      })),
+      { placeHolder: `选择要加入的分组（将添加 ${paths.length} 个已打开文件）` },
+    );
+    if (!picked) {
+      return;
+    }
+
+    const result = await manager.addFilesToGroup(picked.groupId, paths);
+    treeProvider.refresh();
+    vscode.window.setStatusBarMessage(
+      `已加入「${picked.label}」：新增 ${result.added}` +
+        (result.skipped ? `，已存在跳过 ${result.skipped}` : ''),
+      4000,
+    );
+  });
+
+  register('tabGroups.createGroupFromGitChanges', async () => {
+    const folder = await ensureValidWorkspace();
+    if (!folder) {
+      return;
+    }
+
+    const collected = await collectGitChangesWithRepoPick();
+    if (!collected.ok) {
+      if (collected.reason === 'cancelled') {
+        return;
+      }
+      if (collected.reason === 'no-repos') {
+        await vscode.window.showInformationMessage(
+          '当前工作区未找到 Git 仓库。若前后端是独立仓库，请确认它们位于工作区子文件夹内。',
+        );
+        return;
+      }
+      if (collected.reason === 'no-changes') {
+        await vscode.window.showInformationMessage(
+          '所选 Git 仓库没有未提交变更（含未跟踪文件）。',
+        );
+        return;
+      }
+      return;
+    }
+
+    const { paths, repos } = collected;
+    let branchHint: string | undefined;
+    if (repos.length === 1) {
+      branchHint = await getGitBranchAt(repos[0].rootFsPath);
+    } else {
+      branchHint = `${repos.length} 个仓库`;
+    }
+
+    const name = await vscode.window.showInputBox({
+      prompt: `将 ${paths.length} 个 Git 变更文件建成新分组`,
+      value: defaultGitChangesGroupName(branchHint),
+      validateInput: (value) => (value.trim() ? undefined : '分组名称不能为空'),
+    });
+    if (!name) {
+      return;
+    }
+
+    const group = await manager.createGroup(name.trim());
+    const result = await manager.addFilesToGroup(group.id, paths);
+    treeProvider.refresh();
+    vscode.window.setStatusBarMessage(
+      `已创建「${group.name}」：加入 ${result.added} 个变更文件` +
+        (result.skipped ? `，跳过 ${result.skipped}` : ''),
+      4000,
+    );
+  });
+
+  register('tabGroups.exportGroup', async (item?: GroupTreeItem) => {
+    const folder = await ensureValidWorkspace();
+    if (!folder) {
+      return;
+    }
+
+    const group = resolveGroupItem(item, sidebar)?.group;
+    if (!group) {
+      await vscode.window.showWarningMessage('请先在侧边栏选中一个分组。');
+      return;
+    }
+
+    await runExportTabGroups(manager, [group.id]);
+  });
+
+  register('tabGroups.copyGroupAsAiContext', async (item?: GroupTreeItem) => {
+    const folder = await ensureValidWorkspace();
+    if (!folder) {
+      return;
+    }
+
+    const group = resolveGroupItem(item, sidebar)?.group;
+    if (!group) {
+      await vscode.window.showWarningMessage('请先在侧边栏选中一个分组。');
+      return;
+    }
+
+    const relativePaths = manager.getGroupFilePathsRecursive(group.id);
+    if (relativePaths.length === 0) {
+      await vscode.window.showInformationMessage(`分组「${group.name}」中没有文件。`);
+      return;
+    }
+
+    const modePick = await vscode.window.showQuickPick(
+      [
+        {
+          label: '路径 + 文件内容',
+          description: 'Markdown，适合粘贴到 Chat / Agent（推荐）',
+          mode: 'contents' as AiContextMode,
+        },
+        {
+          label: '仅路径列表',
+          description: '轻量，方便自己 @ 文件或核对范围',
+          mode: 'paths' as AiContextMode,
+        },
+      ],
+      { placeHolder: `复制「${group.name}」为 AI 上下文（${relativePaths.length} 个文件）` },
+    );
+    if (!modePick) {
+      return;
+    }
+
+    const result =
+      modePick.mode === 'paths'
+        ? buildAiContextPathsMarkdown(group.name, relativePaths)
+        : await buildAiContextContentsMarkdown(group.name, relativePaths);
+
+    await vscode.env.clipboard.writeText(result.text);
+
+    const parts = [`已复制「${group.name}」`];
+    if (modePick.mode === 'contents') {
+      parts.push(`内容 ${result.included} 个`);
+      if (result.skippedMissing) {
+        parts.push(`缺失 ${result.skippedMissing}`);
+      }
+      if (result.skippedLarge) {
+        parts.push(`跳过 ${result.skippedLarge}`);
+      }
+    } else {
+      parts.push(`路径 ${result.included} 条`);
+    }
+    if (result.totalChars >= AI_CONTEXT_WARN_TOTAL_CHARS) {
+      parts.push('上下文较长，粘贴前请留意模型窗口');
+    }
+    vscode.window.setStatusBarMessage(parts.join(' · '), 5000);
   });
 
   register('tabGroups.deleteGroup', async (item?: GroupTreeItem) => {

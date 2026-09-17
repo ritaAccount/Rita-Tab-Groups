@@ -10,6 +10,8 @@
   const openGroupsButton = document.getElementById('openGroupsFile');
   const openConfigsButton = document.getElementById('openConfigsFile');
   const upgradeConfigButton = document.getElementById('upgradeConfig');
+  const exportConfigButton = document.getElementById('exportConfig');
+  const importConfigButton = document.getElementById('importConfig');
   const resetDisplayButton = document.getElementById('resetDisplay');
   const modeSelect = document.getElementById('markerJumpHintMode');
   const secondsInput = document.getElementById('markerJumpHintSeconds');
@@ -176,6 +178,16 @@
 
   upgradeConfigButton?.addEventListener('click', () => {
     vscodeApi.postMessage({ type: 'upgradeConfig' });
+  });
+
+  exportConfigButton?.addEventListener('click', () => {
+    setGeneralStatus('正在导出…');
+    vscodeApi.postMessage({ type: 'exportConfig' });
+  });
+
+  importConfigButton?.addEventListener('click', () => {
+    setGeneralStatus('正在导入…');
+    vscodeApi.postMessage({ type: 'importConfig' });
   });
 
   resetDisplayButton?.addEventListener('click', () => {

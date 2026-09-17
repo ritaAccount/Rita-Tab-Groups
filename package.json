@@ -188,6 +188,18 @@
         "icon": "$(add)"
       },
       {
+        "command": "tabGroups.createGroupFromOpenEditors",
+        "title": "从打开的标签创建分组"
+      },
+      {
+        "command": "tabGroups.addOpenEditorsToGroup",
+        "title": "将打开的标签加入分组"
+      },
+      {
+        "command": "tabGroups.createGroupFromGitChanges",
+        "title": "从 Git 变更创建分组"
+      },
+      {
         "command": "tabGroups.deleteGroup",
         "title": "删除分组"
       },
@@ -300,6 +312,22 @@
         "command": "tabGroups.openSettings",
         "title": "设置",
         "icon": "$(gear)"
+      },
+      {
+        "command": "tabGroups.exportConfig",
+        "title": "导出配置"
+      },
+      {
+        "command": "tabGroups.importConfig",
+        "title": "导入配置"
+      },
+      {
+        "command": "tabGroups.exportGroup",
+        "title": "导出此分组"
+      },
+      {
+        "command": "tabGroups.copyGroupAsAiContext",
+        "title": "复制为 AI 上下文"
       }
     ],
     "keybindings": [
@@ -360,6 +388,21 @@
           "command": "tabGroups.openSettings",
           "when": "view == tabGroupsView",
           "group": "navigation@2"
+        },
+        {
+          "command": "tabGroups.createGroupFromOpenEditors",
+          "when": "view == tabGroupsView && workspaceFolderCount == 1",
+          "group": "1_workspace@1"
+        },
+        {
+          "command": "tabGroups.addOpenEditorsToGroup",
+          "when": "view == tabGroupsView && workspaceFolderCount == 1",
+          "group": "1_workspace@2"
+        },
+        {
+          "command": "tabGroups.createGroupFromGitChanges",
+          "when": "view == tabGroupsView && workspaceFolderCount == 1",
+          "group": "1_workspace@3"
         }
       ],
       "view/item/context": [
@@ -392,6 +435,16 @@
           "command": "tabGroups.collapseAll",
           "when": "view == tabGroupsView && (viewItem == group || viewItem == groupRegex) && workspaceFolderCount == 1",
           "group": "1_group@4"
+        },
+        {
+          "command": "tabGroups.exportGroup",
+          "when": "view == tabGroupsView && (viewItem == group || viewItem == groupRegex) && workspaceFolderCount == 1",
+          "group": "1_group@5"
+        },
+        {
+          "command": "tabGroups.copyGroupAsAiContext",
+          "when": "view == tabGroupsView && (viewItem == group || viewItem == groupRegex) && workspaceFolderCount == 1",
+          "group": "1_group@6"
         },
         {
           "command": "tabGroups.setManual",
@@ -491,6 +544,16 @@
           "group": "1_group@4"
         },
         {
+          "command": "tabGroups.exportGroup",
+          "when": "webviewId == tabGroupsView && (webviewItem == group || webviewItem == groupRegex) && workspaceFolderCount == 1",
+          "group": "1_group@5"
+        },
+        {
+          "command": "tabGroups.copyGroupAsAiContext",
+          "when": "webviewId == tabGroupsView && (webviewItem == group || webviewItem == groupRegex) && workspaceFolderCount == 1",
+          "group": "1_group@6"
+        },
+        {
           "command": "tabGroups.setManual",
           "when": "webviewId == tabGroupsView && webviewItem == group && workspaceFolderCount == 1",
           "group": "2_config@1"
@@ -578,11 +641,14 @@
   "scripts": {
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./"
+    "watch": "tsc -watch -p ./",
+    "package": "npm run compile && vsce package",
+    "publish": "node scripts/publish.js"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",
     "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.3.2",
     "typescript": "^5.3.3"
   }
 }

@@ -129,6 +129,7 @@ interface SearchSettings {
 
 - 新建分组（需单根工作区，创建**根级**分组）
 - **设置**（始终显示，无工作区限制；打开设置页，含「通用」「快捷键」；保存快捷键/打开配置文件时需单根工作区）
+- 标题 `…` 菜单（`1_workspace`）：**从打开的标签创建分组** / **将打开的标签加入分组** / **从 Git 变更创建分组**
 
 **节点搜索**（与分组列表同在 `tabGroupsView` Webview 内，位于标题下方）：
 
@@ -153,6 +154,8 @@ interface SearchSettings {
 - **新建子分组**
 - **展开分组**（打开组内所有文件）：一键在编辑器中打开该分组 `files` 中的全部文件；不存在的文件跳过；最后一个文件获得焦点
 - **折叠分组**（关闭组内所有文件）：一键关闭编辑器中属于该分组的所有已打开标签页
+- **导出此分组**：导出该分组子树及被引用的全局 `configs` 为 JSON
+- **复制为 AI 上下文**：复制路径列表，或路径 + 文件内容（Markdown）到剪贴板，便于粘贴 Chat / Agent
 - 设置为手动
 - 设置正则（内嵌）
 - 引用全局配置（弹出列表选择已有全局配置）
@@ -192,12 +195,12 @@ interface SearchSettings {
 - 侧边栏标题栏齿轮图标打开 Webview 面板「Tab Groups 设置」
 - 布局：左侧设置分类，右侧当前分类内容（对齐 Cursor Settings）
 - 分类：**通用**（默认选中）、**显示**、**快捷键**
-- **通用**：打开 `.vscode/tab-groups.json`（`groups` / `configs`）；**配置版本更新**（比较文件 `version` 与 schema `CONFIG_VERSION`，落后则迁移写回）
+- **通用**：打开 `.vscode/tab-groups.json`（`groups` / `configs`）；**配置版本更新**（比较文件 `version` 与 schema `CONFIG_VERSION`，落后则迁移写回）；**导出配置** / **导入配置**（见 §4.x 导入导出）
 - **显示**：**标记左下角显示** — 下拉 `always`（一直显示，默认）/ `timed`（显示秒数，出现时长行）/ `off`（关闭）；**显示来源分支** — 开关（默认开启，侧边栏旁注/悬停）；**分组类型显示** — 下拉 `label`（名称后，默认）/ `hover`（仅悬停）/ `both`（都显示）；**改完即存** 至 `tabGroups.display`
 - **快捷键** 分类：展示可绑定命令及当前快捷键；点击快捷键框后**按键捕获**录入新组合
 - **保存**：显示配置自动写入；快捷键需点保存写入 `tabGroups.shortcuts` 并同步 keybindings
 - **恢复默认**：显示页立即恢复并保存；快捷键页仅预览，需点保存
-- 无单根工作区时可打开面板预览，但无法保存快捷键 / 显示配置 / 打开配置文件 / 升级配置
+- 无单根工作区时可打开面板预览，但无法保存快捷键 / 显示配置 / 打开配置文件 / 升级配置 / 导入导出
 - 三页统一 Setting Row（左标题说明、右控件；内容区 max-width）
 
 **默认快捷键**：
@@ -230,6 +233,9 @@ interface SearchSettings {
 | 操作   | 实现说明                                                                                                                             |
 | ---- | -------------------------------------------------------------------------------------------------------------------------------- |
 | 新建分组 | 弹出输入框获取名称，生成新 `id`，创建空 `files` 数组，默认无 config 和 configId（即手动分组）。保存 JSON。支持快捷键触发（v2）。                                              |
+| 从打开的标签创建 | `tabGroups.createGroupFromOpenEditors`：收集当前 `tabGroups` 中工作区文件 → 命名 → 新建手动组并批量加入。 |
+| 将打开的标签加入 | `tabGroups.addOpenEditorsToGroup`：同上采集 → QuickPick 目标分组 → `addFilesToGroup`（已存在跳过）。 |
+| 从 Git 变更创建 | `tabGroups.createGroupFromGitChanges`：发现工作区根及嵌套仓库（可多选）→ `git status --porcelain` → 路径映射到工作区根 → 命名（默认带分支或多仓数）→ 新建手动组。 |
 | 删除分组 | 从 `groups` 中移除；若该分组引用的全局配置不再被任何分组使用，**弹窗询问**是否一并删除该全局配置。快捷键触发时，若侧边栏未选中分组，弹出 QuickPick 选择目标分组（v2）。                                |
 | 重命名  | 直接修改 `group.name`。                                                                                                               |
 | 展开分组 | 遍历该分组 `files`，调用 `vscode.window.showTextDocument` 依次打开；跳过不存在或无法打开的文件；非最后一个文件使用 `preserveFocus: true` 在后台打开。                      |
@@ -283,6 +289,7 @@ interface SearchSettings {
 | 场景             | 行为                                                                                                           |
 | -------------- | ------------------------------------------------------------------------------------------------------------ |
 | 打开设置页          | `tabGroups.openSettings`，左分类右内容；默认选中「通用」                                                                     |
+| 导出 / 导入配置     | `tabGroups.exportConfig` / `tabGroups.importConfig`；分组右键 `tabGroups.exportGroup`                                      |
 | 录入快捷键          | Webview 内按键捕获，格式校验（修饰键 + 主键）                                                                                 |
 | 保存             | `workspace.getConfiguration().update('tabGroups.shortcuts', …, Workspace)` + `syncKeybindingsFromSettings()` |
 | 激活时初始化         | `ensureWorkspaceShortcutSettings()`：补全缺失的工作区配置项                                                              |
@@ -307,7 +314,43 @@ interface SearchSettings {
 
 **实现文件**：`src/tree/searchView.ts`、`src/tree/searchFilter.ts`、`src/tree/treeProvider.ts`、`src/tree/fileIconTheme.ts`、`src/settings/searchSettingsUtils.ts`、`media/search.*`、`media/codicons/*`
 
-### 4.7 数据持久化与同步
+### 4.7 配置导入 / 导出（v1.1.3）
+
+| 场景 | 行为 |
+| ---- | ---- |
+| 导出全部 | `tabGroups.exportConfig` →「导出全部」→ 另存 JSON（全部 `groups` / `configs`） |
+| 导出部分 | 多选分组；自动含子树；只带被引用的全局 `configs`；父未选中时选中节点升为导出包根级 |
+| 导出此分组 | 分组右键 `tabGroups.exportGroup`，导出该子树 |
+| 导入合并 | 新 UUID，作为新根级并入当前配置 |
+| 导入替换 | 二次确认后整文件覆盖 |
+| 格式 | 与工作区 `tab-groups.json` 同构；导入时 normalize files / hierarchy |
+
+**实现文件**：`src/data/importExportUtils.ts`、`src/data/tabGroupsManager.ts`、`src/settings/importExportCommands.ts`、`src/settings/settingsWebview.ts`、`media/settings.js`、`src/tree/commands.ts`
+
+### 4.8 一键工作集（v1.1.4）
+
+| 场景 | 行为 |
+| ---- | ---- |
+| 从打开的标签创建 | 命令面板或侧边栏 `…` → 收集已打开工作区文件 → 输入名称（默认带时间）→ 新建手动分组 |
+| 将打开的标签加入 | 选择已有分组，批量加入；路径已存在则跳过 |
+| 从 Git 变更创建 | `git status --porcelain`（含未跟踪）；支持嵌套多仓库选择；默认名带当前分支 |
+| 过滤 | 仅 `file` scheme 且落在单根工作区内；Diff 取 modified；Notebook 计入 |
+
+**实现文件**：`src/workspace/workingSetUtils.ts`、`workingSetParseUtils.ts`、`src/data/tabGroupsManager.ts`（`addFilesToGroup`）、`src/tree/commands.ts`
+
+### 4.9 复制分组为 AI 上下文（v1.1.5）
+
+| 场景 | 行为 |
+| ---- | ---- |
+| 入口 | 分组右键 / 命令 `tabGroups.copyGroupAsAiContext` |
+| 仅路径 | Markdown 列表，相对工作区根 |
+| 路径 + 内容 | 每个文件一节 + 围栏代码块；按扩展名猜语言 |
+| 范围 | 子树去重文件 |
+| 保护 | 缺失 / >200KB / 二进制跳过并注明；总长 ≥400KB 状态栏提醒 |
+
+**实现文件**：`src/workspace/aiContextFormatUtils.ts`、`aiContextUtils.ts`、`src/tree/commands.ts`
+
+### 4.10 数据持久化与同步
 
 - 任何修改（增删改分组、文件、配置）都立即写回 JSON 文件。
 - 启动插件时读取 JSON 文件，若文件不存在则创建空结构 `{ groups: [], configs: [] }`。
@@ -367,12 +410,19 @@ src/
 │   ├── types.ts
 │   ├── tabGroupsManager.ts
 │   ├── fileEntryUtils.ts        # CONFIG_VERSION、别名与 markers / branch 迁移
-│   └── groupHierarchyUtils.ts
+│   ├── groupHierarchyUtils.ts
+│   └── importExportUtils.ts     # 导出打包 / 导入合并与替换
 ├── workspace/                   # 工作区路径、文件存在性、Git 分支、AI Skill
 │   ├── workspaceUtils.ts
 │   ├── fileExistenceCache.ts
 │   ├── gitBranchUtils.ts
-│   └── aiGuideUtils.ts          # 激活时写入 .cursor/skills/tab-groups/SKILL.md
+│   ├── gitRepoUtils.ts          # 嵌套仓库发现 / 分支
+│   ├── gitRepoPathUtils.ts      # 仓库路径映射纯函数
+│   ├── aiGuideUtils.ts          # 激活时写入 .cursor/skills/tab-groups/SKILL.md
+│   ├── workingSetUtils.ts       # 打开标签 / Git 变更 → 相对路径
+│   ├── workingSetParseUtils.ts  # porcelain 解析与默认分组名（无 vscode 依赖）
+│   ├── aiContextUtils.ts        # 读盘组装「路径+内容」Markdown
+│   └── aiContextFormatUtils.ts  # 路径列表 / 语言围栏等纯函数
 ├── tree/                        # 侧边栏、命令、编辑器打开 / 标记跳转
 │   ├── treeProvider.ts
 │   ├── commands.ts
@@ -383,6 +433,7 @@ src/
 │   └── fileIconTheme.ts         # 文件图标主题（与资源管理器一致）
 └── settings/                    # 设置页、快捷键、显示 / 搜索配置
     ├── settingsWebview.ts
+    ├── importExportCommands.ts  # 导入导出对话框流程
     ├── shortcutUtils.ts
     ├── displaySettingsUtils.ts
     └── searchSettingsUtils.ts  # tabGroups.search
@@ -471,6 +522,9 @@ version/                         # 版本信息（不参与运行时）；约定
 ### 阶段 8：快捷键（v2）
 
 - [x] `tabGroups.openSettings` 命令与 `view/title`「设置」按钮（左分类右内容；「通用」「快捷键」）
+- [x] 配置导入 / 导出（设置通用 + 分组右键导出子树；合并 / 替换）
+- [x] 一键工作集：从打开的标签创建/加入；从 Git 变更创建
+- [x] 复制分组为 AI 上下文（路径 / 路径+内容）
 - [x] Webview 按键捕获与格式校验
 - [x] 工作区 `tabGroups.shortcuts` 读写与激活时默认值补全
 - [x] 同步用户 `keybindings.json`
@@ -527,7 +581,7 @@ version/                         # 版本信息（不参与运行时）；约定
 
 ## 11. 开发记录
 
-各版本的开发决策、歧义澄清与实现记录见 **[developer-record.md](./developer-record.md)**。
+各版本的开发决策、歧义澄清与实现记录见 **[developer-record.md](./developer-record.md)**（公开）。维护者本机敏感记录见 `developer-record.private.md`（不进仓库）。
 
 面向普通用户的功能说明见 **[README.md](./README.md)**。
 
