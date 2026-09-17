@@ -1,53 +1,86 @@
-# VSCode 标签分组插件 - 开发文档（基于最新配置模型）
+# Rita Tab Groups — 开发文档（当前真相）
+
+> **本文件描述当前产品规格**（数据模型、命令、交互、实现要点）。  
+> 历史决策与歧义澄清 → [`developer-record.md`](./developer-record.md)  
+> 可协作待办 → [`developer-mission-list.md`](./developer-mission-list.md)  
+> 贡献入口 → [`CONTRIBUTING.md`](./CONTRIBUTING.md)  
+> 用户用法 → [`README.md`](./README.md)  
+> 发版说明 → [`CHANGELOG.md`](./CHANGELOG.md)
 
 ## 1. 概述
 
 **插件名称**：Rita Tab Groups  
 **扩展标识**：`Rita.rita-tab-groups`（Publisher: `Rita`，package name: `rita-tab-groups`）  
-**功能**：允许用户将 VSCode 中打开或未打开的文件组织成逻辑分组，支持手动添加和基于正则的自动扫描。分组配置可内嵌于分组，也可定义为全局配置供多个分组复用。v2 起支持可自定义快捷键（Webview 录入、工作区配置、同步至用户 keybindings）。
+**功能**：将打开或未打开的文件组织成逻辑分组；支持手动添加、正则扫描、嵌套分组、文件标记（游标/函数/字符）、自定义快捷键与设置页 Webview、配置导入导出、一键工作集、复制为 AI 上下文、工作区 AI Skill。
 
-**版本**：v1.0（MVP）+ v2（快捷键）
+**当前版本线**（勿混用）：
+
+| 线 | 当前值（以源码为准） | 说明 |
+|----|----------------------|------|
+| Marketplace | `package.json` → `version` | 用户安装的扩展版本 |
+| 配置 schema | `CONFIG_VERSION`（`src/data/fileEntryUtils.ts`） | `.vscode/tab-groups.json` |
+| AI Skill | `AI_GUIDE_VERSION`（`src/workspace/aiGuideUtils.ts`） | 写入工作区的 Skill |
 
 ---
 
 ## 2. 数据结构设计（JSON Schema）
 
-存储路径：`<workspaceRoot>/.vscode/tab-groups.json`
+存储路径：`<workspaceRoot>/.vscode/tab-groups.json`  
+权威类型定义：`src/data/types.ts`。下面与源码对齐；若有冲突以源码为准。
 
 ```typescript
-// 基础配置类型
 interface BaseConfig {
   type: 'manual' | 'regex';
 }
 interface ManualConfig extends BaseConfig {
   type: 'manual';
 }
-
 interface RegexConfig extends BaseConfig {
   type: 'regex';
-  regex: string;        // 正则表达式字符串
+  regex: string;
 }
-
-// 分组内嵌配置（不需要 id）
 type InlineConfig = ManualConfig | RegexConfig;
 
-// 全局配置（需要唯一 id）
-interface GlobalConfig extends InlineConfig {
+type GlobalConfig = (ManualConfig | RegexConfig) & {
   id: string;
-  description?: string; // 可选的说明
+  description?: string;
+};
+
+/** 单条标记内容（type 在 FileMarkerGroup 上） */
+interface FileMarkerItem {
+  label: string;
+  line: number;
+  column: number;
+  branch?: string;
+  symbolName?: string;
+  symbolKind?: number;
+  query?: string; // text 标记
 }
 
-// 分组定义
+interface FileMarkerGroup {
+  type: 'cursor' | 'function' | 'text';
+  content: FileMarkerItem[];
+}
+
+interface GroupFileEntry {
+  path: string;   // 相对工作区根
+  alias: string;
+  branch?: string;
+  markers?: FileMarkerGroup[];
+}
+
 interface Group {
-  id: string;           // 唯一标识（UUID 或自增）
-  name: string;         // 显示名称
-  files: string[];      // 文件相对路径数组（相对于工作区根目录）
-  config?: InlineConfig; // 内嵌配置，优先级高于 configId
-  configId?: string;     // 引用全局配置的 id
+  id: string;
+  name: string;
+  level: number;
+  children: string[];      // 子分组 id
+  files: GroupFileEntry[];
+  config?: InlineConfig;   // 优先于 configId
+  configId?: string;
 }
 
-// 根数据结构
 interface TabGroupsData {
+  version?: string;        // 与 CONFIG_VERSION 对齐
   groups: Group[];
   configs: GlobalConfig[];
 }
@@ -59,9 +92,11 @@ interface TabGroupsData {
 - 否则如果 `group.configId` 存在 → 在 `configs` 中查找匹配的全局配置
 - 否则 → 视为 `{ type: "manual" }`（默认手动分组）
 
-**路径存储**：所有 `files` 使用相对于工作区根目录的路径（例如 `src/index.ts`），保证跨平台和可移植性。
+**路径存储**：`files[].path` 使用相对于工作区根目录的路径（例如 `src/index.ts`），保证跨平台和可移植性。
 
-### 2.1 快捷键配置（v2）
+完整示例见 [`example/`](./example/) 与 [`version/tab-groups/`](./version/tab-groups/)。
+
+### 2.1 快捷键配置
 
 存储路径：`<workspaceRoot>/.vscode/settings.json` → `tabGroups.shortcuts`
 
@@ -514,8 +549,7 @@ version/                         # 版本信息（不参与运行时）；约定
 ### 阶段 7：测试与打包
 
 - [ ] 编写单元测试（Mocha）
-- [ ] 本地 `vsce package` 生成 `.vsix` 并安装测试
-- [ ] 发布到 Marketplace
+- [x] 本地打包 / Marketplace 发布（由维护者仓外完成；本仓不文档化凭证）
 
 
 
@@ -551,13 +585,12 @@ version/                         # 版本信息（不参与运行时）；约定
 
 
 
-## 9. 后续迭代计划（v3）
+## 9. 后续迭代计划
 
-- **最近使用分组快捷键**：快速将当前文件加入最近使用的分组（v2 已实现基础四条快捷键，此项仍待做）
-- **自动分组**：根据打开的文件自动建议加入分组（基于规则）
-- **分组颜色/徽章**：在树视图中显示不同颜色图标
-- **跨工作区共享配置**：支持用户级全局分组（不依赖工作区）
-- **文件移动/重命名自动同步路径**
+公开可认领任务见 **[`developer-mission-list.md`](./developer-mission-list.md)**（做完删除对应条目）。  
+维护者未公开优先级不在本仓。
+
+历史曾列、现已交付的能力（导入导出、工作集、AI 上下文、嵌套 Git 等）见 [`CHANGELOG.md`](./CHANGELOG.md) 与 [`developer-record.md`](./developer-record.md)。
 
 ---
 
@@ -579,10 +612,13 @@ version/                         # 版本信息（不参与运行时）；约定
 
 
 
-## 11. 开发记录
+## 11. 相关文档
 
-各版本的开发决策、歧义澄清与实现记录见 **[developer-record.md](./developer-record.md)**（公开）。维护者本机敏感记录见 `developer-record.private.md`（不进仓库）。
-
-面向普通用户的功能说明见 **[README.md](./README.md)**。
-
-安装后产生的配置对照示例见 **[example/](./example/)**。
+| 文档 | 用途 |
+|------|------|
+| [`CONTRIBUTING.md`](./CONTRIBUTING.md) | 贡献与双仓边界 |
+| [`developer-record.md`](./developer-record.md) | 决策与 bugfix |
+| [`developer-mission-list.md`](./developer-mission-list.md) | 公开待办 |
+| [`CHANGELOG.md`](./CHANGELOG.md) | 用户可见发版说明 |
+| [`README.md`](./README.md) | 终端用户用法 |
+| [`example/`](./example/) | 安装后配置对照示例 |

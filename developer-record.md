@@ -1,11 +1,7 @@
-# Tab Groups — 开发记录（公开）
+# Tab Groups — 开发记录
 
 > 记录各版本开发过程中人类与 AI 的**产品与实现**决策、澄清与 bugfix，供其他开发者 / AI 参考。  
 > 产品需求与 API 说明见 [developer-readme.md](./developer-readme.md)。
->
-> **分工**：
-> - 本文件 `developer-record.md`：可进仓库；写功能、数据结构、交互、公开命令与文件路径。
-> - `developer-record.private.md`：仅维护者本机；写 PAT、发版脚本、账号等敏感调整（已 `.gitignore`，不提交）。
 
 ---
 
@@ -630,14 +626,36 @@ media/shortcuts.js        # 按键捕获逻辑
 
 ---
 
-### 开发记录公开 / 私有拆分（2026-09-17）
+### 维护者敏感材料迁出（2026-09-17）
 
 | 项 | 决策 |
 |----|------|
-| 公开 | `developer-record.md`：产品与实现决策，可进仓库 |
-| 私有 | `developer-record.private.md`：PAT、本机发版等；`.gitignore` |
-| 约定 | `AGENTS.md` / `CLAUDE.md` / docs-maintenance 规则已同步 |
+| 本仓 | 不保留 PAT、本机发版脚本；公开文档不具名引用维护者仓外材料的路径或仓库名 |
+| 发版 | 由维护者在仓外流程完成；贡献者 PR 不负责 Marketplace 发布 |
 
-**涉及文件**：`developer-record.md`、`developer-record.private.md`、`.gitignore`、文档规则
+**涉及文件**：`.gitignore`、公开文档去掉凭证与发版脚本引用
+
+### 工程边界 P0（2026-09-17）
+
+| 项 | 决策 |
+|----|------|
+| 贡献入口 | 本仓新增 `CONTRIBUTING.md`（本仓边界、文档按类型更新、PR 不抢 version） |
+| mission-list | 删除「已完成」节，只保留未完成可协作待办 |
+
+**涉及文件**：`CONTRIBUTING.md`、`developer-mission-list.md`
+
+### 工程边界续（2026-09-17）
+
+| 项 | 决策 |
+|----|------|
+| 成功标准（本仓） | PR 可独立合入且不踩雷 |
+| 知情隔离 | 公开文档不写维护者仓外仓库名、私有文件名或 secrets 路径 |
+| 文档规则 | `docs-maintenance` 按改动类型勾选，不再默认全量同步 |
+| 当前真相 | `developer-readme` 抬头为规格入口，§2 与 `types.ts` 对齐 |
+| 发版说明 | 本仓新增 `CHANGELOG.md`；README / CONTRIBUTING 互链 |
+| mission-list | 只留可协作项；探索性 idea 不放公开待办 |
+
+**涉及文件**：`CONTRIBUTING`、`CHANGELOG`、`developer-readme`、`developer-mission-list`、`README`、本机 `.cursor/rules`
+
 
 
