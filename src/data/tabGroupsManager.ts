@@ -6,10 +6,12 @@ import {
   CONFIG_VERSION,
   defaultAliasFromPath,
   defaultCursorLabel,
+  folderFieldForStorage,
   groupContainsPath,
   isVersionLessThan,
   normalizeBranchName,
   normalizeGroupFiles,
+  fileEntryMatches,
 } from './fileEntryUtils';
 import { normalizeGroupColor, normalizeGroupIcon } from './groupAppearanceUtils';
 import {
@@ -122,9 +124,16 @@ export class TabGroupsManager {
     return this.data.groups;
   }
 
-  containsFilePath(relativePath: string): boolean {
+  /**
+   * 配置中是否引用了某相对路径。
+   * sourceFolderName：文件实际所在根的 name；缺省视为本 manager 的根。
+   */
+  containsFilePath(relativePath: string, sourceFolderName?: string): boolean {
+    const folderName = sourceFolderName ?? this.folder.name;
     return this.data.groups.some((group) =>
-      group.files.some((file) => file.path === relativePath),
+      group.files.some((file) =>
+        fileEntryMatches(file, relativePath, this.folder.name, folderName),
+      ),
     );
   }
 
@@ -267,27 +276,38 @@ export class TabGroupsManager {
     return true;
   }
 
-  async addFileToGroup(groupId: string, filePath: string): Promise<boolean> {
-    const result = await this.addFilesToGroup(groupId, [filePath]);
+  async addFileToGroup(
+    groupId: string,
+    filePath: string,
+    sourceFolderName?: string,
+  ): Promise<boolean> {
+    const result = await this.addFilesToGroup(groupId, [
+      { path: filePath, folder: sourceFolderName },
+    ]);
     return result.added > 0;
   }
 
   /** 批量加入分组；跳过已存在路径；只写盘一次 */
   async addFilesToGroup(
     groupId: string,
-    filePaths: string[],
+    files: Array<string | { path: string; folder?: string }>,
   ): Promise<{ added: number; skipped: number }> {
     const group = this.getGroup(groupId);
-    if (!group || filePaths.length === 0) {
-      return { added: 0, skipped: filePaths.length };
+    if (!group || files.length === 0) {
+      return { added: 0, skipped: files.length };
     }
 
     const branch = await getCurrentGitBranch(this.folder);
     let added = 0;
     let skipped = 0;
 
-    for (const filePath of filePaths) {
-      if (!filePath || groupContainsPath(group, filePath)) {
+    for (const item of files) {
+      const filePath = typeof item === 'string' ? item : item.path;
+      const sourceFolderName = typeof item === 'string' ? undefined : item.folder;
+      if (
+        !filePath ||
+        groupContainsPath(group, filePath, this.folder.name, sourceFolderName)
+      ) {
         skipped += 1;
         continue;
       }
@@ -295,6 +315,10 @@ export class TabGroupsManager {
         path: filePath,
         alias: defaultAliasFromPath(filePath),
       };
+      const folderField = folderFieldForStorage(sourceFolderName, this.folder.name);
+      if (folderField) {
+        entry.folder = folderField;
+      }
       if (branch) {
         entry.branch = branch;
       }
@@ -308,17 +332,23 @@ export class TabGroupsManager {
     return { added, skipped };
   }
 
-  async removeFileFromGroup(groupId: string, filePath: string): Promise<void> {
+  async removeFileFromGroup(
+    groupId: string,
+    filePath: string,
+    sourceFolderName?: string,
+  ): Promise<void> {
     const group = this.getGroup(groupId);
     if (!group) {
       return;
     }
-    group.files = group.files.filter((file) => file.path !== filePath);
+    group.files = group.files.filter(
+      (file) => !fileEntryMatches(file, filePath, this.folder.name, sourceFolderName),
+    );
     await this.save();
   }
 
   async moveFilesToGroup(
-    moves: Array<{ sourceGroupId: string; filePath: string }>,
+    moves: Array<{ sourceGroupId: string; filePath: string; folder?: string }>,
     targetGroupId: string,
   ): Promise<number> {
     const target = this.getGroup(targetGroupId);
@@ -327,7 +357,7 @@ export class TabGroupsManager {
     }
 
     let moved = 0;
-    for (const { sourceGroupId, filePath } of moves) {
+    for (const { sourceGroupId, filePath, folder } of moves) {
       if (sourceGroupId === targetGroupId) {
         continue;
       }
@@ -337,13 +367,17 @@ export class TabGroupsManager {
         continue;
       }
 
-      const entry = source.files.find((file) => file.path === filePath);
+      const entry = source.files.find((file) =>
+        fileEntryMatches(file, filePath, this.folder.name, folder),
+      );
       if (!entry) {
         continue;
       }
 
-      source.files = source.files.filter((file) => file.path !== filePath);
-      if (!groupContainsPath(target, filePath)) {
+      source.files = source.files.filter(
+        (file) => !fileEntryMatches(file, filePath, this.folder.name, folder),
+      );
+      if (!groupContainsPath(target, filePath, this.folder.name, entry.folder)) {
         target.files.push({ ...entry });
       }
       moved++;
@@ -391,11 +425,16 @@ export class TabGroupsManager {
     return true;
   }
 
-  async removeFileFromAllGroups(filePath: string): Promise<number> {
+  async removeFileFromAllGroups(
+    filePath: string,
+    sourceFolderName?: string,
+  ): Promise<number> {
     let count = 0;
     for (const group of this.data.groups) {
-      if (groupContainsPath(group, filePath)) {
-        group.files = group.files.filter((file) => file.path !== filePath);
+      if (groupContainsPath(group, filePath, this.folder.name, sourceFolderName)) {
+        group.files = group.files.filter(
+          (file) => !fileEntryMatches(file, filePath, this.folder.name, sourceFolderName),
+        );
         count++;
       }
     }
@@ -410,6 +449,7 @@ export class TabGroupsManager {
     filePath: string,
     alias: string,
     applyToAllGroups: boolean,
+    sourceFolderName?: string,
   ): Promise<void> {
     const trimmedAlias = alias.trim();
     if (!trimmedAlias) {
@@ -419,14 +459,16 @@ export class TabGroupsManager {
     if (applyToAllGroups) {
       for (const group of this.data.groups) {
         for (const file of group.files) {
-          if (file.path === filePath) {
+          if (fileEntryMatches(file, filePath, this.folder.name, sourceFolderName)) {
             file.alias = trimmedAlias;
           }
         }
       }
     } else {
       const group = this.getGroup(groupId);
-      const file = group?.files.find((entry) => entry.path === filePath);
+      const file = group?.files.find((entry) =>
+        fileEntryMatches(entry, filePath, this.folder.name, sourceFolderName),
+      );
       if (!file) {
         return;
       }
@@ -436,12 +478,55 @@ export class TabGroupsManager {
     await this.save();
   }
 
-  countGroupsContainingFile(filePath: string): number {
-    return this.data.groups.filter((group) => groupContainsPath(group, filePath)).length;
+  countGroupsContainingFile(filePath: string, sourceFolderName?: string): number {
+    return this.data.groups.filter((group) =>
+      groupContainsPath(group, filePath, this.folder.name, sourceFolderName),
+    ).length;
   }
 
-  getFileEntry(groupId: string, filePath: string): GroupFileEntry | undefined {
-    return this.getGroup(groupId)?.files.find((file) => file.path === filePath);
+  getFileEntry(
+    groupId: string,
+    filePath: string,
+    sourceFolderName?: string,
+  ): GroupFileEntry | undefined {
+    return this.getGroup(groupId)?.files.find((file) =>
+      fileEntryMatches(file, filePath, this.folder.name, sourceFolderName),
+    );
+  }
+
+  /**
+   * 将完整条目迁入本 manager 的分组（跨根拖放用）。
+   * sourceFolderName：文件实际所在根名；与本根相同时省略 folder 字段。
+   */
+  async adoptFileEntry(
+    groupId: string,
+    entry: GroupFileEntry,
+    sourceFolderName: string,
+  ): Promise<boolean> {
+    const group = this.getGroup(groupId);
+    if (!group) {
+      return false;
+    }
+    if (groupContainsPath(group, entry.path, this.folder.name, sourceFolderName)) {
+      return false;
+    }
+    const next: GroupFileEntry = {
+      path: entry.path,
+      alias: entry.alias,
+    };
+    const folderField = folderFieldForStorage(sourceFolderName, this.folder.name);
+    if (folderField) {
+      next.folder = folderField;
+    }
+    if (entry.branch) {
+      next.branch = entry.branch;
+    }
+    if (entry.markers) {
+      next.markers = entry.markers;
+    }
+    group.files.push(next);
+    await this.save();
+    return true;
   }
 
   getGroupFilePathsRecursive(groupId: string): string[] {
@@ -465,8 +550,9 @@ export class TabGroupsManager {
       query?: string;
       branch?: string;
     },
+    sourceFolderName?: string,
   ): Promise<boolean> {
-    const entry = this.getFileEntry(groupId, filePath);
+    const entry = this.getFileEntry(groupId, filePath, sourceFolderName);
     if (!entry) {
       return false;
     }
@@ -521,8 +607,9 @@ export class TabGroupsManager {
     filePath: string,
     markerType: import('./types').FileMarkerType,
     contentIndex: number,
+    sourceFolderName?: string,
   ): Promise<boolean> {
-    const entry = this.getFileEntry(groupId, filePath);
+    const entry = this.getFileEntry(groupId, filePath, sourceFolderName);
     if (!entry?.markers) {
       return false;
     }
@@ -550,8 +637,9 @@ export class TabGroupsManager {
     markerType: import('./types').FileMarkerType,
     contentIndex: number,
     label: string,
+    sourceFolderName?: string,
   ): Promise<boolean> {
-    const entry = this.getFileEntry(groupId, filePath);
+    const entry = this.getFileEntry(groupId, filePath, sourceFolderName);
     const group = entry?.markers?.find((g) => g.type === markerType);
     if (!group || contentIndex < 0 || contentIndex >= group.content.length) {
       return false;
@@ -591,8 +679,10 @@ export class TabGroupsManager {
     return this.renameMarker(groupId, filePath, 'cursor', cursorIndex, label);
   }
 
-  getGroupsContainingFile(filePath: string): Group[] {
-    return this.data.groups.filter((group) => groupContainsPath(group, filePath));
+  getGroupsContainingFile(filePath: string, sourceFolderName?: string): Group[] {
+    return this.data.groups.filter((group) =>
+      groupContainsPath(group, filePath, this.folder.name, sourceFolderName),
+    );
   }
 
   getConfigVersion(): string | undefined {

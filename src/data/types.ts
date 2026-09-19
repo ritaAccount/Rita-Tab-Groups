@@ -35,6 +35,11 @@ export interface Group {
 export interface GroupFileEntry {
   path: string;
   alias: string;
+  /**
+   * 多根时：文件所属工作区文件夹名（WorkspaceFolder.name）。
+   * 省略表示与配置所在根相同（单根 / 同根条目）。
+   */
+  folder?: string;
   /** 加入分组时的 Git 分支（可选；旧数据可能没有） */
   branch?: string;
   /**

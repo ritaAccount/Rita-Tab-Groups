@@ -1,0 +1,11 @@
+{
+  "version": "1.7.0",
+  "kind": "tab-groups",
+  "from": "1.6.0",
+  "summary": "文件条目可选 folder，支持跨工作区根引用",
+  "changes": [
+    "GroupFileEntry 新增可选字段 folder（WorkspaceFolder.name）",
+    "缺省 folder 表示文件与配置位于同一工作区根（兼容旧数据）",
+    "写入时同根省略 folder；跨根写入根名，侧边栏显示 根名/相对路径"
+  ]
+}

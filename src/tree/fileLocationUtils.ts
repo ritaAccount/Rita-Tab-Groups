@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { FileMarkerItem, FileMarkerType, FlatFileMarker, GroupFileEntry } from '../data/types';
 import { flattenMarkers, markerTypeLabel } from '../data/fileEntryUtils';
 import { getDisplaySettings } from '../settings/displaySettingsUtils';
-import { toAbsoluteUri, toRelativePath } from '../workspace/workspaceUtils';
+import { resolveEntryFolder, toAbsoluteUri, toRelativePath } from '../workspace/workspaceUtils';
 
 let jumpHintItem: vscode.StatusBarItem | undefined;
 let jumpHintTimer: ReturnType<typeof setTimeout> | undefined;
@@ -322,7 +322,11 @@ export async function openFileEntry(
   entry: GroupFileEntry,
   options?: { preserveFocus?: boolean; markerIndex?: number },
 ): Promise<boolean> {
-  const uri = toAbsoluteUri(entry.path, folder);
+  const sourceFolder = resolveEntryFolder(folder, entry);
+  if (!sourceFolder) {
+    return false;
+  }
+  const uri = toAbsoluteUri(entry.path, sourceFolder);
 
   try {
     const document = await vscode.workspace.openTextDocument(uri);
@@ -357,7 +361,11 @@ export async function openFileAtMarker(
   marker: FlatFileMarker,
   options?: { preserveFocus?: boolean },
 ): Promise<boolean> {
-  const uri = toAbsoluteUri(entry.path, folder);
+  const sourceFolder = resolveEntryFolder(folder, entry);
+  if (!sourceFolder) {
+    return false;
+  }
+  const uri = toAbsoluteUri(entry.path, sourceFolder);
 
   try {
     const document = await vscode.workspace.openTextDocument(uri);

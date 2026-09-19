@@ -62,10 +62,16 @@
           "path": "src/utils.ts",
           "alias": "utils.ts",
           "branch": "main"
+        },
+        {
+          "path": "README.md",
+          "alias": "README.md",
+          "folder": "other-root",
+          "branch": "main"
         }
       ],
       "color": "blue",
-      "icon": "bookmark"
+      "icon": "bug"
     },
     {
       "id": "group-1a",

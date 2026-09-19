@@ -7,7 +7,7 @@ import {
   GroupFileEntry,
 } from './types';
 
-export const CONFIG_VERSION = '1.6.0';
+export const CONFIG_VERSION = '1.7.0';
 
 export function defaultAliasFromPath(relativePath: string): string {
   return relativePath.split('/').pop() ?? relativePath;
@@ -243,9 +243,13 @@ export function formatFileLocationSuffix(entry: GroupFileEntry): string {
 export function formatFileEntryDescription(
   entry: GroupFileEntry,
   exists: boolean,
-  options?: { showSourceBranch?: boolean },
+  options?: { showSourceBranch?: boolean; showFolder?: boolean },
 ): string {
-  const pathLabel = exists ? entry.path : `${entry.path}（不存在）`;
+  const pathBase =
+    options?.showFolder && entry.folder
+      ? `${entry.folder}/${entry.path}`
+      : entry.path;
+  const pathLabel = exists ? pathBase : `${pathBase}（不存在）`;
   const branchPrefix =
     options?.showSourceBranch && entry.branch
       ? `${truncateBranchLabel(entry.branch)} · `
@@ -256,13 +260,16 @@ export function formatFileEntryDescription(
 export function formatFileEntryTooltip(
   entry: GroupFileEntry,
   exists: boolean,
-  options?: { showSourceBranch?: boolean },
+  options?: { showSourceBranch?: boolean; showFolder?: boolean },
 ): string {
   const lines: string[] = [];
   if (options?.showSourceBranch && entry.branch) {
     lines.push(`分支：${entry.branch}`);
   }
-  lines.push(formatFileEntryDescription(entry, exists, { showSourceBranch: false }));
+  lines.push(formatFileEntryDescription(entry, exists, {
+    showSourceBranch: false,
+    showFolder: options?.showFolder,
+  }));
   return lines.join('\n');
 }
 
@@ -306,6 +313,11 @@ export function normalizeFileEntry(raw: unknown): GroupFileEntry | undefined {
       path,
       alias: alias || defaultAliasFromPath(path),
     };
+    const folderName =
+      typeof rawEntry.folder === 'string' ? rawEntry.folder.trim() : '';
+    if (folderName) {
+      entry.folder = folderName;
+    }
     const branch = normalizeBranchName(rawEntry.branch);
     if (branch) {
       entry.branch = branch;
@@ -385,8 +397,55 @@ export function getGroupFilePaths(group: Group): string[] {
   return group.files.map((file) => file.path);
 }
 
-export function groupContainsPath(group: Group, filePath: string): boolean {
-  return group.files.some((file) => file.path === filePath);
+/** 将条目 folder 规范为工作区文件夹名（缺省用配置所在根名） */
+export function resolveStoredFolderName(
+  entryFolder: string | undefined,
+  homeFolderName: string,
+): string {
+  const trimmed = entryFolder?.trim();
+  return trimmed || homeFolderName;
+}
+
+/**
+ * 条目是否匹配 (path, folder)。
+ * folderName 缺省表示「配置所在根」；与 entry.folder 缺省语义一致。
+ */
+export function fileEntryMatches(
+  entry: GroupFileEntry,
+  filePath: string,
+  homeFolderName: string,
+  folderName?: string,
+): boolean {
+  if (entry.path !== filePath) {
+    return false;
+  }
+  return (
+    resolveStoredFolderName(entry.folder, homeFolderName) ===
+    resolveStoredFolderName(folderName, homeFolderName)
+  );
+}
+
+export function groupContainsPath(
+  group: Group,
+  filePath: string,
+  homeFolderName: string,
+  folderName?: string,
+): boolean {
+  return group.files.some((file) =>
+    fileEntryMatches(file, filePath, homeFolderName, folderName),
+  );
+}
+
+/** 写入时：与配置同根则省略 folder，跨根则写入 WorkspaceFolder.name */
+export function folderFieldForStorage(
+  fileFolderName: string | undefined,
+  homeFolderName: string,
+): string | undefined {
+  const name = fileFolderName?.trim();
+  if (!name || name === homeFolderName) {
+    return undefined;
+  }
+  return name;
 }
 
 export function buildScannedFiles(

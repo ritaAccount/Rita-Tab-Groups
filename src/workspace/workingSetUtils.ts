@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
-import { getWorkspaceFolders, toRelativePath } from './workspaceUtils';
+import { getWorkspaceFolders, toRelativePath, resolveWorkspaceFolder } from './workspaceUtils';
 import { parseGitStatusPorcelain } from './workingSetParseUtils';
 import {
   GitRepoInfo,
@@ -22,14 +22,14 @@ export { discoverGitRepos, mapRepoPathToWorkspace, getGitBranchAt } from './gitR
 const execFileAsync = promisify(execFile);
 
 /**
- * 收集当前编辑器中已打开、且属于指定根（或全部根）的文件相对路径。
- * 返回路径相对**各自所属根**；调用方应只把同一根的路径交给对应 manager。
+ * 收集当前编辑器中已打开、且属于指定根（或全部根）的文件。
+ * 返回 path 相对各自所属根，并带上所属 WorkspaceFolder。
  */
-export function collectOpenEditorRelativePaths(
+export function collectOpenEditorFileRefs(
   folder?: vscode.WorkspaceFolder,
-): string[] {
+): Array<{ path: string; folder: vscode.WorkspaceFolder }> {
   const seen = new Set<string>();
-  const paths: string[] = [];
+  const refs: Array<{ path: string; folder: vscode.WorkspaceFolder }> = [];
 
   for (const group of vscode.window.tabGroups.all) {
     for (const tab of group.tabs) {
@@ -37,16 +37,37 @@ export function collectOpenEditorRelativePaths(
       if (!uri || uri.scheme !== 'file') {
         continue;
       }
-      const relative = toRelativePath(uri, folder);
-      if (!relative || seen.has(relative)) {
+      const fileFolder = resolveWorkspaceFolder(uri);
+      if (!fileFolder) {
         continue;
       }
-      seen.add(relative);
-      paths.push(relative);
+      if (folder && fileFolder.uri.toString() !== folder.uri.toString()) {
+        continue;
+      }
+      const relative = toRelativePath(uri, fileFolder);
+      if (!relative) {
+        continue;
+      }
+      const key = `${fileFolder.uri.toString()}::${relative}`;
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      refs.push({ path: relative, folder: fileFolder });
     }
   }
 
-  return paths;
+  return refs;
+}
+
+/**
+ * 收集当前编辑器中已打开、且属于指定根（或全部根）的文件相对路径。
+ * 返回路径相对**各自所属根**；仅同根场景可安全直接交给对应 manager。
+ */
+export function collectOpenEditorRelativePaths(
+  folder?: vscode.WorkspaceFolder,
+): string[] {
+  return collectOpenEditorFileRefs(folder).map((ref) => ref.path);
 }
 
 /** 按工作区根分组收集已打开文件。 */

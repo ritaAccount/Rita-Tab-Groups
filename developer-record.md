@@ -665,7 +665,7 @@ media/shortcuts.js        # 按键捕获逻辑
 |----|------|
 | 配置 | 每个 `WorkspaceFolder` 各自 `.vscode/tab-groups.json`；路径仍相对本根；**不升** `CONFIG_VERSION` |
 | 树 UI | 多根顶层按文件夹分区（scope）；单根不额外加层 |
-| 操作 | 按文件 uri / 选中 scope 归属目标根；禁止跨根拖放分组/文件 |
+| 操作 | 按文件 uri / 选中 scope 归属目标根；分组节点不可跨根拖放；文件可通过 `folder` 字段跨根加入/拖放 |
 | when | `workspaceFolderCount >= 1` |
 | Skill | `AI_GUIDE_VERSION` → 4；每根各写一份 Skill |
 
@@ -704,6 +704,18 @@ media/shortcuts.js        # 按键捕获逻辑
 | UI | 设置页 Backspace/Delete 清除，显示「未设置」 |
 
 **涉及**：`shortcutUtils`、`shortcuts.js` / `.css`、`settingsWebview`、`developer-readme`
+
+## 跨根虚拟组（2026-09）
+
+| 项 | 决策 |
+|----|------|
+| schema | `CONFIG_VERSION` → `1.7.0`；`GroupFileEntry.folder?` = `WorkspaceFolder.name` |
+| 存储 | 配置仍按根落盘；跨根文件写在目标分组所在根的 json，同根省略 `folder` |
+| 交互 | 加入分组可选任意根的分组；打开标签可跨根建组；侧边栏文件可跨根拖放到另一根的分组 |
+| 未改 | 分组节点本身仍不能跨根拖放（配置归属不变） |
+| Skill | `AI_GUIDE_VERSION` → 8 |
+
+**涉及**：`types`、`fileEntryUtils`、`tabGroupsManager`、`tabGroupsWorkspace`、`treeProvider`、`commands`、`workspaceUtils`、`aiContextUtils`、`version/tab-groups/1.7.0/`、`version/skill/8/`
 
 ---
 

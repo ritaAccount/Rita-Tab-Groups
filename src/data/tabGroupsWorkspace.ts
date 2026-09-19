@@ -65,8 +65,58 @@ export class TabGroupsWorkspace {
     return folder ? this.getManager(folder) : undefined;
   }
 
+  /**
+   * 任一 manager 的配置是否引用了 folder 下的 relativePath
+   *（含跨根条目：其他根的分组通过 folder 字段指向本根文件）。
+   */
   containsFilePath(folder: vscode.WorkspaceFolder, relativePath: string): boolean {
-    return this.getManager(folder)?.containsFilePath(relativePath) ?? false;
+    return this.getManagers().some((manager) =>
+      manager.containsFilePath(relativePath, folder.name),
+    );
+  }
+
+  /**
+   * 列出所有引用了某文件的 (manager, group)（用于跨根加入/移除）。
+   */
+  findGroupsContainingFile(
+    fileFolder: vscode.WorkspaceFolder,
+    relativePath: string,
+  ): Array<{ manager: TabGroupsManager; group: import('./types').Group }> {
+    const result: Array<{ manager: TabGroupsManager; group: import('./types').Group }> = [];
+    for (const manager of this.getManagers()) {
+      for (const group of manager.getGroupsContainingFile(relativePath, fileFolder.name)) {
+        result.push({ manager, group });
+      }
+    }
+    return result;
+  }
+
+  /** 全部根下的全部分组（QuickPick 用）；多根时 label 带根名前缀。 */
+  listAllGroupsForPick(): Array<{
+    label: string;
+    description?: string;
+    groupId: string;
+    manager: TabGroupsManager;
+  }> {
+    const multi = this.isMultiRoot();
+    const items: Array<{
+      label: string;
+      description?: string;
+      groupId: string;
+      manager: TabGroupsManager;
+    }> = [];
+    for (const manager of this.getManagers()) {
+      for (const group of manager.getGroups()) {
+        const pathLabel = manager.getGroupPathLabel(group.id);
+        items.push({
+          label: multi ? `${manager.folder.name} / ${pathLabel}` : pathLabel,
+          description: multi ? undefined : `${group.files.length} 个文件`,
+          groupId: group.id,
+          manager,
+        });
+      }
+    }
+    return items;
   }
 
   isMultiRoot(): boolean {

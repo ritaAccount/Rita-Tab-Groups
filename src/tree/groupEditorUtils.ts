@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { GroupFileEntry } from '../data/types';
 import { fileExistenceCache } from '../workspace/fileExistenceCache';
 import { openFileEntry } from './fileLocationUtils';
-import { toRelativePath } from '../workspace/workspaceUtils';
+import { resolveEntryFolder, toRelativePath } from '../workspace/workspaceUtils';
 
 export async function openGroupFiles(
   folder: vscode.WorkspaceFolder,
@@ -13,7 +13,8 @@ export async function openGroupFiles(
 
   for (let i = 0; i < entries.length; i++) {
     const entry = entries[i];
-    if (!(await fileExistenceCache.exists(folder, entry.path))) {
+    const sourceFolder = resolveEntryFolder(folder, entry);
+    if (!sourceFolder || !(await fileExistenceCache.exists(sourceFolder, entry.path))) {
       skipped++;
       continue;
     }
@@ -32,9 +33,15 @@ export async function openGroupFiles(
 
 export async function closeGroupFiles(
   folder: vscode.WorkspaceFolder,
-  files: string[],
+  entries: GroupFileEntry[],
 ): Promise<number> {
-  const fileSet = new Set(files);
+  const keys = new Set(
+    entries.map((entry) => {
+      const source = resolveEntryFolder(folder, entry);
+      return source ? `${source.uri.toString()}::${entry.path}` : '';
+    }),
+  );
+
   const tabsToClose: vscode.Tab[] = [];
 
   for (const tabGroup of vscode.window.tabGroups.all) {
@@ -43,9 +50,12 @@ export async function closeGroupFiles(
       if (!uri) {
         continue;
       }
-
-      const relativePath = toRelativePath(uri, folder);
-      if (relativePath && fileSet.has(relativePath)) {
+      const tabFolder = vscode.workspace.getWorkspaceFolder(uri);
+      const relativePath = tabFolder ? toRelativePath(uri, tabFolder) : undefined;
+      if (!tabFolder || !relativePath) {
+        continue;
+      }
+      if (keys.has(`${tabFolder.uri.toString()}::${relativePath}`)) {
         tabsToClose.push(tab);
       }
     }

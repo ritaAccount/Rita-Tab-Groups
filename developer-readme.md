@@ -63,8 +63,10 @@ interface FileMarkerGroup {
 }
 
 interface GroupFileEntry {
-  path: string;   // 相对工作区根
+  path: string;   // 相对所属工作区根
   alias: string;
+  /** 多根：文件所属 WorkspaceFolder.name；省略 = 与配置同根 */
+  folder?: string;
   branch?: string;
   markers?: FileMarkerGroup[];
 }
@@ -94,7 +96,7 @@ interface TabGroupsData {
 - 否则如果 `group.configId` 存在 → 在 `configs` 中查找匹配的全局配置
 - 否则 → 视为 `{ type: "manual" }`（默认手动分组）
 
-**路径存储**：`files[].path` 使用相对于**所属工作区根**的路径（例如 `src/index.ts`）。多根时每个根各有一份配置，路径不带根名；保证跨平台和可移植性。
+**路径存储**：`files[].path` 使用相对于**文件所属工作区根**的路径（例如 `src/index.ts`）。多根时每个根仍各有一份配置；跨根引用时在条目上写 `folder`（另一根的文件夹名），同根省略。保证跨平台和可移植性。
 
 完整示例见 [`example/`](./example/) 与 [`version/tab-groups/`](./version/tab-groups/)。
 
@@ -580,7 +582,7 @@ version/                         # 版本信息（不参与运行时）；约定
 
 ## 8. 边界情况与注意事项
 
-1. **多根工作区**：每个 `WorkspaceFolder` 各自维护 `.vscode/tab-groups.json`；路径相对**该根**。侧边栏多根时顶层按文件夹分区（scope），单根不额外加层。无工作区文件夹时禁用并提示。不支持把文件跨根加入另一根的分组。
+1. **多根工作区**：每个 `WorkspaceFolder` 各自维护 `.vscode/tab-groups.json`；同根路径相对该根。侧边栏多根时顶层按文件夹分区（scope），单根不额外加层。无工作区文件夹时禁用并提示。**跨根虚拟组**：同一分组可通过 `files[].folder` 引用其他根下的文件（配置仍落在某一根）；加入分组 / 拖放文件 / 从打开标签创建分组均支持跨根。
 2. **文件被移动/重命名**：分组中存储的相对路径会失效，树视图中灰显并标注「（不存在）」，可右键移除（已监听 `onDidRenameFiles` 刷新存在性）。
 3. **正则表达式转义**：用户输入的正则需经过 `new RegExp()` 验证，无效时提示错误。
 4. **性能**：扫描大量文件时使用 `withProgress` 并支持取消；扫描范围限于目标根。
@@ -611,7 +613,7 @@ version/                         # 版本信息（不参与运行时）；约定
 
 | 示例文件                       | 对应实际路径                                                                   |
 | -------------------------- | ------------------------------------------------------------------------ |
-| `example/tab-groups.json`  | 工作区 `.vscode/tab-groups.json`（schema `1.6.0`：嵌套分组、别名、`markers`、`branch`、可选 `color`/`icon`） |
+| `example/tab-groups.json`  | 工作区 `.vscode/tab-groups.json`（schema `1.7.0`：嵌套分组、别名、`markers`、`branch`、可选 `color`/`icon`、跨根 `folder`） |
 | `example/settings.json`    | 工作区 `.vscode/settings.json`（`tabGroups.shortcuts` + `tabGroups.display` + `tabGroups.search`） |
 | `example/keybindings.json` | 用户 `User/keybindings.json`（保存快捷键时同步，非工作区文件）                              |
 

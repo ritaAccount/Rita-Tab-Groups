@@ -109,6 +109,32 @@ export function toAbsoluteUri(
   return vscode.Uri.joinPath(folder.uri, relativePath);
 }
 
+/**
+ * 按条目的 folder 字段解析文件所在工作区根。
+ * folder 缺省或与 home 同名 → homeFolder；找不到同名根 → undefined。
+ */
+export function resolveEntryFolder(
+  homeFolder: vscode.WorkspaceFolder,
+  entry: { folder?: string },
+): vscode.WorkspaceFolder | undefined {
+  const name = entry.folder?.trim();
+  if (!name || name === homeFolder.name) {
+    return homeFolder;
+  }
+  return getWorkspaceFolders().find((folder) => folder.name === name);
+}
+
+/** 显示用路径：多根且条目带 folder 时加 `根名/` 前缀。 */
+export function formatEntryDisplayPath(
+  entry: { path: string; folder?: string },
+  homeFolderName: string,
+): string {
+  if (entry.folder && entry.folder !== homeFolderName) {
+    return `${entry.folder}/${entry.path}`;
+  }
+  return entry.path;
+}
+
 export async function fileExists(
   relativePath: string,
   folder: vscode.WorkspaceFolder,

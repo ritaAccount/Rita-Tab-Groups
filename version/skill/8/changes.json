@@ -1,0 +1,11 @@
+{
+  "version": 8,
+  "kind": "skill",
+  "from": 7,
+  "summary": "跨根文件条目 folder 字段；schema 1.7.0",
+  "changes": [
+    "允许 files[].folder（WorkspaceFolder.name）引用其他工作区根的文件",
+    "version / schema 说明更新为 1.7.0",
+    "多根原则：跨根文件写在保存分组的那份配置中并带 folder"
+  ]
+}

@@ -9,11 +9,14 @@ import { sortFlatMarkersByLine, flattenMarkers, countMarkers } from '../data/fil
 type TabGroupsTreeElement = TreeElement;
 import {
   ensureValidWorkspace,
+  formatEntryDisplayPath,
+  resolveEntryFolder,
+  resolveWorkspaceFolder,
   toRelativePath,
 } from '../workspace/workspaceUtils';
 import {
   collectGitChangesWithRepoPick,
-  collectOpenEditorRelativePaths,
+  collectOpenEditorFileRefs,
   defaultGitChangesGroupName,
   defaultOpenEditorsGroupName,
   getGitBranchAt,
@@ -26,7 +29,6 @@ import {
 } from '../workspace/aiContextUtils';
 import { TabGroupsSearchViewProvider } from './searchView';
 import { runExportTabGroups } from '../settings/importExportCommands';
-import { getGroupPathLabel } from '../data/groupHierarchyUtils';
 import { GROUP_COLOR_OPTIONS, GROUP_ICON_OPTIONS } from '../data/groupAppearanceUtils';
 
 export function registerCommands(
@@ -86,20 +88,20 @@ export function registerCommands(
 
     const manager = await workspace.resolveTargetManager(
       undefined,
-      '选择要将打开标签加入的工作区文件夹',
+      '选择保存分组配置的工作区文件夹',
     );
     if (!manager) {
       return;
     }
 
-    const paths = collectOpenEditorRelativePaths(manager.folder);
-    if (paths.length === 0) {
-      await vscode.window.showInformationMessage('当前没有可加入该文件夹的已打开工作区文件。');
+    const refs = collectOpenEditorFileRefs();
+    if (refs.length === 0) {
+      await vscode.window.showInformationMessage('当前没有可加入的已打开工作区文件。');
       return;
     }
 
     const name = await vscode.window.showInputBox({
-      prompt: `将 ${paths.length} 个已打开文件建成新分组`,
+      prompt: `将 ${refs.length} 个已打开文件建成新分组`,
       value: defaultOpenEditorsGroupName(),
       validateInput: (value) => (value.trim() ? undefined : '分组名称不能为空'),
     });
@@ -108,7 +110,10 @@ export function registerCommands(
     }
 
     const group = await manager.createGroup(name.trim());
-    const result = await manager.addFilesToGroup(group.id, paths);
+    const result = await manager.addFilesToGroup(
+      group.id,
+      refs.map((ref) => ({ path: ref.path, folder: ref.folder.name })),
+    );
     treeProvider.refresh();
     vscode.window.setStatusBarMessage(
       `已创建「${group.name}」：加入 ${result.added} 个文件` +
@@ -122,39 +127,29 @@ export function registerCommands(
       return;
     }
 
-    const manager = await workspace.resolveTargetManager(
-      undefined,
-      '选择目标工作区文件夹',
-    );
-    if (!manager) {
+    const refs = collectOpenEditorFileRefs();
+    if (refs.length === 0) {
+      await vscode.window.showInformationMessage('当前没有可加入的已打开工作区文件。');
       return;
     }
 
-    const paths = collectOpenEditorRelativePaths(manager.folder);
-    if (paths.length === 0) {
-      await vscode.window.showInformationMessage('当前没有可加入该文件夹的已打开工作区文件。');
-      return;
-    }
-
-    const groups = manager.getGroups();
-    if (groups.length === 0) {
+    const picks = workspace.listAllGroupsForPick();
+    if (picks.length === 0) {
       await vscode.window.showInformationMessage('暂无分组，请先新建分组或使用「从打开的标签创建分组」。');
       return;
     }
 
-    const picked = await vscode.window.showQuickPick(
-      groups.map((group) => ({
-        label: getGroupPathLabel(groups, group.id),
-        description: `${group.files.length} 个文件`,
-        groupId: group.id,
-      })),
-      { placeHolder: `选择要加入的分组（将添加 ${paths.length} 个已打开文件）` },
-    );
+    const picked = await vscode.window.showQuickPick(picks, {
+      placeHolder: `选择要加入的分组（将添加 ${refs.length} 个已打开文件）`,
+    });
     if (!picked) {
       return;
     }
 
-    const result = await manager.addFilesToGroup(picked.groupId, paths);
+    const result = await picked.manager.addFilesToGroup(
+      picked.groupId,
+      refs.map((ref) => ({ path: ref.path, folder: ref.folder.name })),
+    );
     treeProvider.refresh();
     vscode.window.setStatusBarMessage(
       `已加入「${picked.label}」：新增 ${result.added}` +
@@ -260,8 +255,8 @@ export function registerCommands(
       return;
     }
 
-    const relativePaths = manager.getGroupFilePathsRecursive(group.id);
-    if (relativePaths.length === 0) {
+    const entries = manager.getGroupFileEntriesRecursive(group.id);
+    if (entries.length === 0) {
       await vscode.window.showInformationMessage(`分组「${group.name}」中没有文件。`);
       return;
     }
@@ -279,16 +274,19 @@ export function registerCommands(
           mode: 'paths' as AiContextMode,
         },
       ],
-      { placeHolder: `复制「${group.name}」为 AI 上下文（${relativePaths.length} 个文件）` },
+      { placeHolder: `复制「${group.name}」为 AI 上下文（${entries.length} 个文件）` },
     );
     if (!modePick) {
       return;
     }
 
+    const displayPaths = entries.map((entry) =>
+      formatEntryDisplayPath(entry, manager.folder.name),
+    );
     const result =
       modePick.mode === 'paths'
-        ? buildAiContextPathsMarkdown(group.name, relativePaths)
-        : await buildAiContextContentsMarkdown(group.name, relativePaths, manager.folder);
+        ? buildAiContextPathsMarkdown(group.name, displayPaths)
+        : await buildAiContextContentsMarkdown(group.name, entries, manager.folder);
 
     await vscode.env.clipboard.writeText(result.text);
 
@@ -589,13 +587,13 @@ export function registerCommands(
     }
 
     const { name } = groupItem.group;
-    const filePaths = manager.getGroupFilePathsRecursive(groupItem.group.id);
-    if (filePaths.length === 0) {
+    const fileEntries = manager.getGroupFileEntriesRecursive(groupItem.group.id);
+    if (fileEntries.length === 0) {
       await vscode.window.showInformationMessage(`分组「${name}」中没有文件。`);
       return;
     }
 
-    const closed = await closeGroupFiles(groupItem.folder, filePaths);
+    const closed = await closeGroupFiles(groupItem.folder, fileEntries);
     if (closed === 0) {
       await vscode.window.showInformationMessage(`分组「${name}」中没有已打开的标签页。`);
       return;
@@ -812,7 +810,11 @@ export function registerCommands(
     }
 
     const manager = managerForGroup(item.groupId);
-    const entry = manager?.getFileEntry(item.groupId, item.relativePath);
+    const entry = manager?.getFileEntry(
+      item.groupId,
+      item.relativePath,
+      item.entryFolder,
+    );
     if (!manager || !entry) {
       return;
     }
@@ -839,18 +841,25 @@ export function registerCommands(
     }
     const { target, manager } = resolved;
 
-    const editor = getMatchingActiveEditor(manager.folder, target.relativePath);
+    const sourceFolder =
+      resolveEntryFolder(manager.folder, { folder: target.entryFolder }) ?? manager.folder;
+    const editor = getMatchingActiveEditor(sourceFolder, target.relativePath);
     if (!editor) {
       await vscode.window.showWarningMessage(`请打开「${target.relativePath}」并将光标置于目标行。`);
       return;
     }
 
     const { line, character } = editor.selection.active;
-    const updated = await manager.addMarker(target.groupId, target.relativePath, {
-      type: 'cursor',
-      line,
-      column: character,
-    });
+    const updated = await manager.addMarker(
+      target.groupId,
+      target.relativePath,
+      {
+        type: 'cursor',
+        line,
+        column: character,
+      },
+      target.entryFolder,
+    );
     if (!updated) {
       return;
     }
@@ -870,7 +879,9 @@ export function registerCommands(
     }
     const { target, manager } = resolved;
 
-    const editor = getMatchingActiveEditor(manager.folder, target.relativePath);
+    const sourceFolder =
+      resolveEntryFolder(manager.folder, { folder: target.entryFolder }) ?? manager.folder;
+    const editor = getMatchingActiveEditor(sourceFolder, target.relativePath);
     if (!editor) {
       await vscode.window.showWarningMessage(`请打开「${target.relativePath}」并将光标置于函数内。`);
       return;
@@ -886,14 +897,19 @@ export function registerCommands(
     }
 
     const { line, character } = enclosing.range.start;
-    const updated = await manager.addMarker(target.groupId, target.relativePath, {
-      type: 'function',
-      line,
-      column: character,
-      label: enclosing.name,
-      symbolName: enclosing.name,
-      symbolKind: enclosing.kind,
-    });
+    const updated = await manager.addMarker(
+      target.groupId,
+      target.relativePath,
+      {
+        type: 'function',
+        line,
+        column: character,
+        label: enclosing.name,
+        symbolName: enclosing.name,
+        symbolKind: enclosing.kind,
+      },
+      target.entryFolder,
+    );
     if (!updated) {
       return;
     }
@@ -913,7 +929,9 @@ export function registerCommands(
     }
     const { target, manager } = resolved;
 
-    const editor = getMatchingActiveEditor(manager.folder, target.relativePath);
+    const sourceFolder =
+      resolveEntryFolder(manager.folder, { folder: target.entryFolder }) ?? manager.folder;
+    const editor = getMatchingActiveEditor(sourceFolder, target.relativePath);
     if (!editor) {
       await vscode.window.showWarningMessage(`请打开「${target.relativePath}」并选中或定位要匹配的文本。`);
       return;
@@ -940,13 +958,18 @@ export function registerCommands(
     }
 
     const { line, character } = selection.active;
-    const updated = await manager.addMarker(target.groupId, target.relativePath, {
-      type: 'text',
-      line,
-      column: character,
-      query,
-      label: query.length > 24 ? `${query.slice(0, 24)}…` : query,
-    });
+    const updated = await manager.addMarker(
+      target.groupId,
+      target.relativePath,
+      {
+        type: 'text',
+        line,
+        column: character,
+        query,
+        label: query.length > 24 ? `${query.slice(0, 24)}…` : query,
+      },
+      target.entryFolder,
+    );
     if (!updated) {
       return;
     }
@@ -971,6 +994,7 @@ export function registerCommands(
       item.relativePath,
       item.marker.type,
       item.marker.contentIndex,
+      item.entryFolder,
     );
     if (!removed) {
       return;
@@ -1010,6 +1034,7 @@ export function registerCommands(
       item.marker.type,
       item.marker.contentIndex,
       newLabel.trim(),
+      item.entryFolder,
     );
     if (!renamed) {
       return;
@@ -1042,7 +1067,7 @@ export function registerCommands(
       return;
     }
 
-    await manager.removeFileFromGroup(item.groupId, item.relativePath);
+    await manager.removeFileFromGroup(item.groupId, item.relativePath, item.entryFolder);
     treeProvider.refresh();
     vscode.window.setStatusBarMessage(`已从分组中移除 ${item.relativePath}`, 3000);
   });
@@ -1053,8 +1078,9 @@ export function registerCommands(
       return;
     }
 
-    await vscode.env.clipboard.writeText(item.relativePath);
-    vscode.window.setStatusBarMessage(`已复制路径：${item.relativePath}`, 3000);
+    const display = formatEntryDisplayPath(item.fileEntry, item.folder.name);
+    await vscode.env.clipboard.writeText(display);
+    vscode.window.setStatusBarMessage(`已复制路径：${display}`, 3000);
   });
 
   register('tabGroups.renameFile', async (item?: FileTreeItem) => {
@@ -1068,7 +1094,11 @@ export function registerCommands(
       return;
     }
 
-    const currentEntry = manager.getFileEntry(item.groupId, item.relativePath);
+    const currentEntry = manager.getFileEntry(
+      item.groupId,
+      item.relativePath,
+      item.entryFolder,
+    );
     if (!currentEntry) {
       return;
     }
@@ -1083,7 +1113,7 @@ export function registerCommands(
     }
 
     let applyToAllGroups = false;
-    if (manager.countGroupsContainingFile(item.relativePath) > 1) {
+    if (manager.countGroupsContainingFile(item.relativePath, item.entryFolder) > 1) {
       const choice = await vscode.window.showInformationMessage(
         '是否要修改所有组别里的别名？',
         '是',
@@ -1095,7 +1125,13 @@ export function registerCommands(
       applyToAllGroups = choice === '是';
     }
 
-    await manager.renameFileAlias(item.groupId, item.relativePath, newAlias.trim(), applyToAllGroups);
+    await manager.renameFileAlias(
+      item.groupId,
+      item.relativePath,
+      newAlias.trim(),
+      applyToAllGroups,
+      item.entryFolder,
+    );
     treeProvider.refresh();
     vscode.window.setStatusBarMessage(`已将 ${item.relativePath} 的显示名称改为「${newAlias.trim()}」`, 3000);
   });
@@ -1111,31 +1147,31 @@ export function registerCommands(
       return;
     }
 
-    const manager = workspace.findManagerByUri(targetUri);
-    const relativePath = toRelativePath(targetUri);
-    if (!manager || !relativePath) {
+    const fileFolder = resolveWorkspaceFolder(targetUri);
+    const relativePath = toRelativePath(targetUri, fileFolder);
+    if (!fileFolder || !relativePath) {
       await vscode.window.showWarningMessage('只能将工作区内的文件加入分组。');
       return;
     }
 
-    const groups = manager.getGroups();
-    if (groups.length === 0) {
+    const picks = workspace.listAllGroupsForPick();
+    if (picks.length === 0) {
       await vscode.window.showInformationMessage('暂无分组，请先在侧边栏创建分组。');
       return;
     }
 
-    const picked = await vscode.window.showQuickPick(
-      manager.getGroups().map((group) => ({
-        label: manager.getGroupPathLabel(group.id),
-        groupId: group.id,
-      })),
-      { placeHolder: '选择要加入的分组' },
-    );
+    const picked = await vscode.window.showQuickPick(picks, {
+      placeHolder: '选择要加入的分组（可跨工作区文件夹）',
+    });
     if (!picked) {
       return;
     }
 
-    const added = await manager.addFileToGroup(picked.groupId, relativePath);
+    const added = await picked.manager.addFileToGroup(
+      picked.groupId,
+      relativePath,
+      fileFolder.name,
+    );
     treeProvider.refresh();
     if (added) {
       vscode.window.setStatusBarMessage(`已将 ${relativePath} 加入分组「${picked.label}」`, 3000);
@@ -1155,25 +1191,34 @@ export function registerCommands(
       return;
     }
 
-    const manager = workspace.findManagerByUri(targetUri);
-    const relativePath = toRelativePath(targetUri);
-    if (!manager || !relativePath) {
+    const fileFolder = resolveWorkspaceFolder(targetUri);
+    const relativePath = toRelativePath(targetUri, fileFolder);
+    if (!fileFolder || !relativePath) {
       await vscode.window.showWarningMessage('只能操作工作区内的文件。');
       return;
     }
 
-    const groups = manager.getGroupsContainingFile(relativePath);
-    if (groups.length === 0) {
+    const hits = workspace.findGroupsContainingFile(fileFolder, relativePath);
+    if (hits.length === 0) {
       await vscode.window.showInformationMessage('当前文件不属于任何分组。');
       return;
     }
 
+    const multi = workspace.isMultiRoot();
     const picked = await vscode.window.showQuickPick(
       [
-        { label: '全部分组', description: '一次性从所有分组中移除', groupId: '__all__' },
-        ...groups.map((group) => ({
-          label: manager.getGroupPathLabel(group.id),
+        {
+          label: '全部分组',
+          description: '一次性从所有分组中移除',
+          groupId: '__all__',
+          manager: undefined as TabGroupsManager | undefined,
+        },
+        ...hits.map(({ manager, group }) => ({
+          label: multi
+            ? `${manager.folder.name} / ${manager.getGroupPathLabel(group.id)}`
+            : manager.getGroupPathLabel(group.id),
           groupId: group.id,
+          manager: manager as TabGroupsManager | undefined,
         })),
       ],
       { placeHolder: '选择要退出的分组' },
@@ -1183,13 +1228,23 @@ export function registerCommands(
     }
 
     if (picked.groupId === '__all__') {
-      const count = await manager.removeFileFromAllGroups(relativePath);
+      let count = 0;
+      for (const { manager } of hits) {
+        count += await manager.removeFileFromAllGroups(relativePath, fileFolder.name);
+      }
       treeProvider.refresh();
       vscode.window.setStatusBarMessage(`已将 ${relativePath} 从 ${count} 个分组中移除`, 3000);
       return;
     }
 
-    await manager.removeFileFromGroup(picked.groupId, relativePath);
+    if (!picked.manager) {
+      return;
+    }
+    await picked.manager.removeFileFromGroup(
+      picked.groupId,
+      relativePath,
+      fileFolder.name,
+    );
     treeProvider.refresh();
     vscode.window.setStatusBarMessage(`已将 ${relativePath} 从分组「${picked.label}」中移除`, 3000);
   });
@@ -1213,6 +1268,7 @@ interface AddMarkerTarget {
   groupId: string;
   relativePath: string;
   alias: string;
+  entryFolder?: string;
 }
 
 async function resolveAddMarkerTarget(
@@ -1232,6 +1288,7 @@ async function resolveAddMarkerTarget(
         groupId: fileItem.groupId,
         relativePath: fileItem.relativePath,
         alias: fileItem.fileEntry.alias,
+        entryFolder: fileItem.entryFolder,
       },
     };
   }
@@ -1242,35 +1299,41 @@ async function resolveAddMarkerTarget(
     return undefined;
   }
 
-  const manager = workspace.findManagerByUri(targetUri);
-  const relativePath = toRelativePath(targetUri);
-  if (!manager || !relativePath) {
+  const fileFolder = resolveWorkspaceFolder(targetUri);
+  const relativePath = toRelativePath(targetUri, fileFolder);
+  if (!fileFolder || !relativePath) {
     await vscode.window.showWarningMessage('只能为工作区内的文件添加标记。');
     return undefined;
   }
 
-  const groups = manager.getGroupsContainingFile(relativePath);
-  if (groups.length === 0) {
+  const hits = workspace.findGroupsContainingFile(fileFolder, relativePath);
+  if (hits.length === 0) {
     await vscode.window.showWarningMessage('当前文件不在任何分组中，请先加入分组。');
     return undefined;
   }
 
-  if (groups.length === 1) {
-    const entry = manager.getFileEntry(groups[0].id, relativePath);
+  const multi = workspace.isMultiRoot();
+  if (hits.length === 1) {
+    const { manager, group } = hits[0];
+    const entry = manager.getFileEntry(group.id, relativePath, fileFolder.name);
     return {
       manager,
       target: {
-        groupId: groups[0].id,
+        groupId: group.id,
         relativePath,
         alias: entry?.alias ?? relativePath.split('/').pop() ?? relativePath,
+        entryFolder: entry?.folder,
       },
     };
   }
 
   const picked = await vscode.window.showQuickPick(
-    groups.map((group) => ({
-      label: manager.getGroupPathLabel(group.id),
+    hits.map(({ manager, group }) => ({
+      label: multi
+        ? `${manager.folder.name} / ${manager.getGroupPathLabel(group.id)}`
+        : manager.getGroupPathLabel(group.id),
       groupId: group.id,
+      manager,
     })),
     { placeHolder: '选择要添加标记的分组' },
   );
@@ -1278,13 +1341,14 @@ async function resolveAddMarkerTarget(
     return undefined;
   }
 
-  const entry = manager.getFileEntry(picked.groupId, relativePath);
+  const entry = picked.manager.getFileEntry(picked.groupId, relativePath, fileFolder.name);
   return {
-    manager,
+    manager: picked.manager,
     target: {
       groupId: picked.groupId,
       relativePath,
       alias: entry?.alias ?? relativePath.split('/').pop() ?? relativePath,
+      entryFolder: entry?.folder,
     },
   };
 }
@@ -1314,29 +1378,36 @@ async function jumpMarker(workspace: TabGroupsWorkspace, direction: 'prev' | 'ne
     return;
   }
 
-  const manager = workspace.findManagerByUri(editor.document.uri);
-  const relativePath = toRelativePath(editor.document.uri);
-  if (!manager || !relativePath) {
+  const fileFolder = resolveWorkspaceFolder(editor.document.uri);
+  const relativePath = toRelativePath(editor.document.uri, fileFolder);
+  if (!fileFolder || !relativePath) {
     await vscode.window.showWarningMessage('只能在工作区内的文件中跳转标记。');
     return;
   }
 
-  const groups = manager.getGroupsContainingFile(relativePath).filter((group) => {
-    const entry = manager.getFileEntry(group.id, relativePath);
-    return countMarkers(entry?.markers) > 0;
-  });
+  const hits = workspace
+    .findGroupsContainingFile(fileFolder, relativePath)
+    .filter(({ manager, group }) => {
+      const entry = manager.getFileEntry(group.id, relativePath, fileFolder.name);
+      return countMarkers(entry?.markers) > 0;
+    });
 
-  if (groups.length === 0) {
+  if (hits.length === 0) {
     await vscode.window.showWarningMessage('当前文件没有已保存的标记。');
     return;
   }
 
-  let groupId = groups[0].id;
-  if (groups.length > 1) {
+  let manager = hits[0].manager;
+  let groupId = hits[0].group.id;
+  if (hits.length > 1) {
+    const multi = workspace.isMultiRoot();
     const picked = await vscode.window.showQuickPick(
-      groups.map((group) => ({
-        label: manager.getGroupPathLabel(group.id),
-        groupId: group.id,
+      hits.map((hit) => ({
+        label: multi
+          ? `${hit.manager.folder.name} / ${hit.manager.getGroupPathLabel(hit.group.id)}`
+          : hit.manager.getGroupPathLabel(hit.group.id),
+        groupId: hit.group.id,
+        manager: hit.manager,
       })),
       { placeHolder: '选择要跳转标记的分组' },
     );
@@ -1344,9 +1415,10 @@ async function jumpMarker(workspace: TabGroupsWorkspace, direction: 'prev' | 'ne
       return;
     }
     groupId = picked.groupId;
+    manager = picked.manager;
   }
 
-  const entry = manager.getFileEntry(groupId, relativePath);
+  const entry = manager.getFileEntry(groupId, relativePath, fileFolder.name);
   const markers = flattenMarkers(entry?.markers);
   if (markers.length === 0) {
     return;

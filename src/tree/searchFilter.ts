@@ -27,16 +27,21 @@ export function isSearchFilterActive(filter: TreeSearchFilter): boolean {
   return filter.query.trim().length > 0;
 }
 
-export function buildFileSearchKey(groupId: string, relativePath: string): string {
-  return `${groupId}::${relativePath}`;
+export function buildFileSearchKey(
+  groupId: string,
+  relativePath: string,
+  folder?: string,
+): string {
+  return `${groupId}::${folder || '-'}::${relativePath}`;
 }
 
 export function buildMarkerTypeSearchKey(
   groupId: string,
   relativePath: string,
   type: string,
+  folder?: string,
 ): string {
-  return `${groupId}::${relativePath}::${type}`;
+  return `${groupId}::${folder || '-'}::${relativePath}::${type}`;
 }
 
 export function buildMarkerSearchKey(
@@ -44,8 +49,9 @@ export function buildMarkerSearchKey(
   relativePath: string,
   type: string,
   contentIndex: number,
+  folder?: string,
 ): string {
-  return `${groupId}::${relativePath}::${type}::${contentIndex}`;
+  return `${groupId}::${folder || '-'}::${relativePath}::${type}::${contentIndex}`;
 }
 
 export function matchNodeName(name: string, query: string, mode: SearchMode): boolean {
@@ -102,10 +108,11 @@ export function buildTreeSearchIndex(
         continue;
       }
 
-      const fileKey = buildFileSearchKey(group.id, file.path);
+      const fileKey = buildFileSearchKey(group.id, file.path, file.folder);
       const fileNameHit =
         matchNodeName(file.alias, query, filter.mode) ||
-        matchNodeName(defaultAliasFromPath(file.path), query, filter.mode);
+        matchNodeName(defaultAliasFromPath(file.path), query, filter.mode) ||
+        (file.folder ? matchNodeName(file.folder, query, filter.mode) : false);
 
       if (fileNameHit) {
         index.fileKeys.add(fileKey);
@@ -124,9 +131,17 @@ export function buildTreeSearchIndex(
           continue;
         }
         index.fileKeys.add(fileKey);
-        index.markerTypeKeys.add(buildMarkerTypeSearchKey(group.id, file.path, marker.type));
+        index.markerTypeKeys.add(
+          buildMarkerTypeSearchKey(group.id, file.path, marker.type, file.folder),
+        );
         index.markerKeys.add(
-          buildMarkerSearchKey(group.id, file.path, marker.type, marker.contentIndex),
+          buildMarkerSearchKey(
+            group.id,
+            file.path,
+            marker.type,
+            marker.contentIndex,
+            file.folder,
+          ),
         );
         index.matchCount += 1;
         descendantHit = true;
@@ -162,7 +177,7 @@ function markGroupSubtreeVisible(
   }
 
   for (const file of allowedFiles) {
-    const fileKey = buildFileSearchKey(group.id, file.path);
+    const fileKey = buildFileSearchKey(group.id, file.path, file.folder);
     index.fileKeys.add(fileKey);
     index.filesWithAllMarkers.add(fileKey);
   }

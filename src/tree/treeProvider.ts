@@ -20,7 +20,7 @@ import {
   buildTreeSearchIndex,
 } from './searchFilter';
 import { fileExistenceCache } from '../workspace/fileExistenceCache';
-import { isMultiRootWorkspace, isValidWorkspace, toAbsoluteUri } from '../workspace/workspaceUtils';
+import { isMultiRootWorkspace, isValidWorkspace, resolveEntryFolder, toAbsoluteUri } from '../workspace/workspaceUtils';
 import {
   groupColorHex,
   resolveGroupIconId,
@@ -66,6 +66,8 @@ const FILE_DRAG_MIME = 'application/vnd.tabgroups.file';
 interface FileDragPayload {
   groupId: string;
   path: string;
+  /** 条目 folder 字段；同根省略 */
+  folder?: string;
 }
 
 /** 多根工作区顶层：工作区文件夹分区 */
@@ -120,16 +122,24 @@ export class FileTreeItem extends vscode.TreeItem {
       hasMarkers ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None,
     );
     this.relativePath = fileEntry.path;
+    this.entryFolder = fileEntry.folder;
     const showSourceBranch = getDisplaySettings().showSourceBranch;
-    this.description = formatFileEntryDescription(fileEntry, exists, { showSourceBranch });
+    this.description = formatFileEntryDescription(fileEntry, exists, {
+      showSourceBranch,
+      showFolder: isMultiRootWorkspace() && !!fileEntry.folder,
+    });
     this.contextValue = exists ? 'file' : 'missingFile';
     this.iconPath = new vscode.ThemeIcon(
       'file',
       exists ? undefined : new vscode.ThemeColor('disabledForeground'),
     );
-    this.id = buildFileTreeItemId(groupId, fileEntry.path);
-    this.tooltip = formatFileEntryTooltip(fileEntry, exists, { showSourceBranch });
-    this.resourceUri = toAbsoluteUri(fileEntry.path, folder);
+    this.id = buildFileTreeItemId(groupId, fileEntry.path, fileEntry.folder);
+    this.tooltip = formatFileEntryTooltip(fileEntry, exists, {
+      showSourceBranch,
+      showFolder: isMultiRootWorkspace() && !!fileEntry.folder,
+    });
+    const sourceFolder = resolveEntryFolder(folder, fileEntry) ?? folder;
+    this.resourceUri = toAbsoluteUri(fileEntry.path, sourceFolder);
 
     if (exists) {
       this.command = {
@@ -141,6 +151,8 @@ export class FileTreeItem extends vscode.TreeItem {
   }
 
   readonly relativePath: string;
+  /** 跨根条目的 WorkspaceFolder.name；同根为 undefined */
+  readonly entryFolder?: string;
 }
 
 /** 文件下的标记类型组（游标 / 函数 / 匹配） */
@@ -151,13 +163,14 @@ export class MarkerTypeTreeItem extends vscode.TreeItem {
     public readonly relativePath: string,
     public readonly markerType: FileMarkerType,
     public readonly count: number,
+    public readonly entryFolder?: string,
   ) {
     super(markerTypeLabel(markerType), vscode.TreeItemCollapsibleState.Collapsed);
     this.contextValue = 'markerType';
     this.description = String(count);
     this.tooltip = `${relativePath} · ${markerTypeLabel(markerType)}（${count}）`;
     this.iconPath = new vscode.ThemeIcon(markerTypeIcon(markerType));
-    this.id = buildMarkerTypeTreeItemId(groupId, relativePath, markerType);
+    this.id = buildMarkerTypeTreeItemId(groupId, relativePath, markerType, entryFolder);
   }
 }
 
@@ -167,6 +180,7 @@ export class MarkerTreeItem extends vscode.TreeItem {
     public readonly groupId: string,
     public readonly relativePath: string,
     public readonly marker: FlatFileMarker,
+    public readonly entryFolder?: string,
   ) {
     super(marker.item.label, vscode.TreeItemCollapsibleState.None);
     const showSourceBranch = getDisplaySettings().showSourceBranch;
@@ -176,7 +190,13 @@ export class MarkerTreeItem extends vscode.TreeItem {
     this.description = `${branchPrefix}L${marker.item.line + 1}:${marker.item.column + 1}`;
     this.tooltip = formatMarkerTooltip(relativePath, marker, { showSourceBranch });
     this.iconPath = new vscode.ThemeIcon(markerTypeIcon(marker.type));
-    this.id = buildMarkerTreeItemId(groupId, relativePath, marker.type, marker.contentIndex);
+    this.id = buildMarkerTreeItemId(
+      groupId,
+      relativePath,
+      marker.type,
+      marker.contentIndex,
+      entryFolder,
+    );
     this.command = {
       command: 'tabGroups.openMarker',
       title: '打开标记',
@@ -456,26 +476,65 @@ export class TabGroupsTreeProvider
   }
 
   private async dropFiles(payloads: FileDragPayload[], targetGroupId: string): Promise<void> {
-    const manager = this.workspace.findManagerByGroupId(targetGroupId);
-    if (!manager) {
+    const targetManager = this.workspace.findManagerByGroupId(targetGroupId);
+    if (!targetManager) {
       return;
     }
 
+    let moved = 0;
     for (const payload of payloads) {
       const sourceManager = this.workspace.findManagerByGroupId(payload.groupId);
-      if (!sourceManager || sourceManager !== manager) {
-        vscode.window.setStatusBarMessage('不能跨工作区文件夹移动文件', 3000);
-        return;
+      if (!sourceManager) {
+        continue;
       }
-    }
 
-    const moved = await manager.moveFilesToGroup(
-      payloads.map((payload) => ({
-        sourceGroupId: payload.groupId,
-        filePath: payload.path,
-      })),
-      targetGroupId,
-    );
+      if (sourceManager === targetManager) {
+        moved += await targetManager.moveFilesToGroup(
+          [
+            {
+              sourceGroupId: payload.groupId,
+              filePath: payload.path,
+              folder: payload.folder,
+            },
+          ],
+          targetGroupId,
+        );
+        continue;
+      }
+
+      const entry = sourceManager.getFileEntry(
+        payload.groupId,
+        payload.path,
+        payload.folder,
+      );
+      if (!entry) {
+        continue;
+      }
+
+      const sourceFolderName = entry.folder ?? sourceManager.folder.name;
+      const adopted = await targetManager.adoptFileEntry(
+        targetGroupId,
+        entry,
+        sourceFolderName,
+      );
+      if (!adopted) {
+        // 目标已有同文件：仍从源移除，避免重复
+        const already = targetManager.getFileEntry(
+          targetGroupId,
+          entry.path,
+          sourceFolderName,
+        );
+        if (!already) {
+          continue;
+        }
+      }
+      await sourceManager.removeFileFromGroup(
+        payload.groupId,
+        payload.path,
+        payload.folder,
+      );
+      moved += 1;
+    }
 
     if (moved === 0) {
       vscode.window.setStatusBarMessage('文件已在目标分组中，或未发生移动', 3000);
@@ -483,7 +542,7 @@ export class TabGroupsTreeProvider
     }
 
     this.refresh();
-    const targetLabel = manager.getGroupPathLabel(targetGroupId);
+    const targetLabel = targetManager.getGroupPathLabel(targetGroupId);
     vscode.window.setStatusBarMessage(`已将 ${moved} 个文件移动到「${targetLabel}」`, 3000);
   }
 
@@ -494,7 +553,11 @@ export class TabGroupsTreeProvider
 
     if (element instanceof MarkerTreeItem) {
       const manager = this.workspace.findManagerByGroupId(element.groupId);
-      const entry = manager?.getFileEntry(element.groupId, element.relativePath);
+      const entry = manager?.getFileEntry(
+        element.groupId,
+        element.relativePath,
+        element.entryFolder,
+      );
       if (!entry) {
         return undefined;
       }
@@ -509,12 +572,17 @@ export class TabGroupsTreeProvider
         element.relativePath,
         element.marker.type,
         count,
+        element.entryFolder,
       );
     }
 
     if (element instanceof MarkerTypeTreeItem) {
       const manager = this.workspace.findManagerByGroupId(element.groupId);
-      const entry = manager?.getFileEntry(element.groupId, element.relativePath);
+      const entry = manager?.getFileEntry(
+        element.groupId,
+        element.relativePath,
+        element.entryFolder,
+      );
       if (!entry) {
         return undefined;
       }
@@ -575,11 +643,16 @@ export class TabGroupsTreeProvider
         if (!index) {
           return true;
         }
-        return index.fileKeys.has(buildFileSearchKey(element.group.id, fileEntry.path));
+        return index.fileKeys.has(
+          buildFileSearchKey(element.group.id, fileEntry.path, fileEntry.folder),
+        );
       });
       const fileItems = await Promise.all(
         files.map(async (fileEntry) => {
-          const exists = await fileExistenceCache.exists(element.folder, fileEntry.path);
+          const sourceFolder = resolveEntryFolder(element.folder, fileEntry);
+          const exists = sourceFolder
+            ? await fileExistenceCache.exists(sourceFolder, fileEntry.path)
+            : false;
           return new FileTreeItem(element.folder, element.group.id, fileEntry, exists);
         }),
       );
@@ -592,11 +665,20 @@ export class TabGroupsTreeProvider
         if (!index) {
           return true;
         }
-        if (index.filesWithAllMarkers.has(buildFileSearchKey(element.groupId, element.relativePath))) {
+        if (
+          index.filesWithAllMarkers.has(
+            buildFileSearchKey(element.groupId, element.relativePath, element.entryFolder),
+          )
+        ) {
           return true;
         }
         return index.markerTypeKeys.has(
-          buildMarkerTypeSearchKey(element.groupId, element.relativePath, type),
+          buildMarkerTypeSearchKey(
+            element.groupId,
+            element.relativePath,
+            type,
+            element.entryFolder,
+          ),
         );
       });
       return types.map(
@@ -607,20 +689,27 @@ export class TabGroupsTreeProvider
             element.relativePath,
             type,
             count,
+            element.entryFolder,
           ),
       );
     }
 
     if (element instanceof MarkerTypeTreeItem) {
       const manager = this.workspace.findManagerByGroupId(element.groupId);
-      const entry = manager?.getFileEntry(element.groupId, element.relativePath);
+      const entry = manager?.getFileEntry(
+        element.groupId,
+        element.relativePath,
+        element.entryFolder,
+      );
       const group = (entry?.markers ?? []).find((item) => item.type === element.markerType);
       if (!group) {
         return [];
       }
       const showAll =
         !index ||
-        index.filesWithAllMarkers.has(buildFileSearchKey(element.groupId, element.relativePath));
+        index.filesWithAllMarkers.has(
+          buildFileSearchKey(element.groupId, element.relativePath, element.entryFolder),
+        );
       return group.content
         .map((item, contentIndex) => ({ item, contentIndex }))
         .filter(({ contentIndex }) => {
@@ -633,16 +722,23 @@ export class TabGroupsTreeProvider
               element.relativePath,
               element.markerType,
               contentIndex,
+              element.entryFolder,
             ),
           );
         })
         .map(
           ({ item, contentIndex }) =>
-            new MarkerTreeItem(element.folder, element.groupId, element.relativePath, {
-              type: element.markerType,
-              contentIndex,
-              item,
-            }),
+            new MarkerTreeItem(
+              element.folder,
+              element.groupId,
+              element.relativePath,
+              {
+                type: element.markerType,
+                contentIndex,
+                item,
+              },
+              element.entryFolder,
+            ),
         );
     }
 
@@ -685,7 +781,9 @@ export class TabGroupsTreeProvider
     const isRegex = manager.isRegexGroup(group);
     const hasChildren = index
       ? manager.getChildGroups(group.id).some((child) => index.groupIds.has(child.id)) ||
-        group.files.some((file) => index.fileKeys.has(buildFileSearchKey(group.id, file.path)))
+        group.files.some((file) =>
+          index.fileKeys.has(buildFileSearchKey(group.id, file.path, file.folder)),
+        )
       : group.children.length > 0 || group.files.length > 0;
     const item = new GroupTreeItem(manager.folder, group, suffix, isRegex, hasChildren);
 
@@ -819,16 +917,21 @@ function sidebarGroupIcon(element: TreeElement, expanded: boolean): SidebarIcon 
   return color ? { kind: 'codicon', id, color } : { kind: 'codicon', id };
 }
 
-export function buildFileTreeItemId(groupId: string, relativePath: string): string {
-  return `file:${groupId}::${relativePath}`;
+export function buildFileTreeItemId(
+  groupId: string,
+  relativePath: string,
+  folder?: string,
+): string {
+  return `file:${groupId}::${folder || '-'}::${relativePath}`;
 }
 
 export function buildMarkerTypeTreeItemId(
   groupId: string,
   relativePath: string,
   type: FileMarkerType,
+  folder?: string,
 ): string {
-  return `markerType:${groupId}::${relativePath}::${type}`;
+  return `markerType:${groupId}::${folder || '-'}::${relativePath}::${type}`;
 }
 
 export function buildMarkerTreeItemId(
@@ -836,8 +939,9 @@ export function buildMarkerTreeItemId(
   relativePath: string,
   type: FileMarkerType,
   contentIndex: number,
+  folder?: string,
 ): string {
-  return `marker:${groupId}::${relativePath}::${type}::${contentIndex}`;
+  return `marker:${groupId}::${folder || '-'}::${relativePath}::${type}::${contentIndex}`;
 }
 
 function listPresentMarkerTypes(
@@ -901,14 +1005,19 @@ function getFileDragPayload(item: unknown): FileDragPayload | undefined {
   }
 
   if (item instanceof FileTreeItem) {
-    return { groupId: item.groupId, path: item.relativePath };
+    return {
+      groupId: item.groupId,
+      path: item.relativePath,
+      folder: item.entryFolder,
+    };
   }
 
   if (typeof item === 'object' && item !== null) {
     const candidate = item as {
       groupId?: unknown;
       relativePath?: unknown;
-      fileEntry?: { path?: unknown };
+      entryFolder?: unknown;
+      fileEntry?: { path?: unknown; folder?: unknown };
       id?: unknown;
     };
 
@@ -923,8 +1032,10 @@ function getFileDragPayload(item: unknown): FileDragPayload | undefined {
 
     const groupId = candidate.groupId;
     const path = candidate.relativePath ?? candidate.fileEntry?.path;
+    const folderRaw = candidate.entryFolder ?? candidate.fileEntry?.folder;
+    const folder = typeof folderRaw === 'string' && folderRaw ? folderRaw : undefined;
     if (typeof groupId === 'string' && typeof path === 'string') {
-      return { groupId, path };
+      return { groupId, path, folder };
     }
 
     if (typeof candidate.id === 'string') {
@@ -941,22 +1052,26 @@ function parseFileTreeItemId(id: string): FileDragPayload | undefined {
   }
 
   const body = id.slice('file:'.length);
-  const separatorIndex = body.indexOf('::');
-  if (separatorIndex > 0) {
-    return {
-      groupId: body.slice(0, separatorIndex),
-      path: body.slice(separatorIndex + 2),
-    };
+  const first = body.indexOf('::');
+  if (first <= 0) {
+    return undefined;
   }
 
-  if (body.length >= 38 && body[36] === ':') {
-    return {
-      groupId: body.slice(0, 36),
-      path: body.slice(37),
-    };
+  const groupId = body.slice(0, first);
+  const rest = body.slice(first + 2);
+  const second = rest.indexOf('::');
+  if (second < 0) {
+    // 兼容旧 id：file:groupId::path
+    return { groupId, path: rest };
   }
 
-  return undefined;
+  const folderPart = rest.slice(0, second);
+  const path = rest.slice(second + 2);
+  return {
+    groupId,
+    path,
+    folder: folderPart === '-' ? undefined : folderPart,
+  };
 }
 
 function parseFilePayloads(value: unknown): FileDragPayload[] {
